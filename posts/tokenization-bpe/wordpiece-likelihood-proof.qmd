@@ -1,0 +1,146 @@
+---
+title: "From Corpus Log-Likelihood to the WordPiece Merge Score: The Worked derivation"
+description: "A step-by-step derivation showing how WordPiece's unigram log-likelihood objective simplifies to its famous count-ratio scoring formula."
+date: 2026-10-31
+categories: [LLMs, tokenization, WordPiece, math]
+license: "CC BY-SA 4.0"
+draft: false
+---
+
+*This is a companion mathematical note to [Tokenization and Byte-Pair Encoding: How LLMs Turn Text into Numbers](index.qmd).*
+
+When building a subword vocabulary bottom-up, **Byte-Pair Encoding (BPE)** merges whichever adjacent pair $(a, b)$ has the highest raw count $\text{count}(ab)$. **WordPiece** (Schuster & Nakajima, 2012; Devlin et al., 2019) instead chooses the merge that best improves the **log-likelihood** of the training corpus.
+
+In many tutorials, you will usually see two different formulas for WordPiece:
+
+1. **The approximate log-likelihood gain:**
+   $$\Delta \log L \approx \text{count}(ab) \cdot \log \frac{P(ab)}{P(a)\,P(b)}$$
+2. **The simplified merge score:**
+   $$\text{score}(a,b) = \frac{\text{count}(ab)}{\text{count}(a) \cdot \text{count}(b)}$$
+
+Two questions naturally arise when looking at these equations:
+
+1. **Why is the first formula an approximation ($\approx$) rather than an exact equality ($=$)?**
+2. **How do we safely drop the outer $\text{count}(ab)$ multiplier and the $\log$ to arrive at the second formula?**
+
+Below is the complete derivation answering both questions from first principles.
+
+---
+
+## 1. The Unigram Log-Likelihood Setup
+
+Suppose our training corpus currently consists of a sequence of $N$ tokens $t_1, t_2, \dots, t_N$ drawn from a vocabulary $V$. 
+
+To score how well the vocabulary $V$ models the corpus, WordPiece fits a **unigram language model**: it assumes every token occurs independently with its maximum-likelihood probability $P(t) = \frac{c_t}{N}$, where $c_t = \text{count}(t)$ is the number of times token $t$ appears in the corpus.
+
+The total log-likelihood of the corpus is:
+
+$$\log L = \sum_{i=1}^{N} \log P(t_i) = \sum_{t \in V} c_t \log \left(\frac{c_t}{N}\right) = \left(\sum_{t \in V} c_t \log c_t\right) - N \log N$$
+
+Now suppose we consider merging every adjacent pair $(a, b)$ (assuming $a \neq b$) into a single new token $ab$, which occurs $c_{ab} = \text{count}(ab)$ times. Look carefully at what happens to the corpus statistics **before** and **after** the merge:
+
+| Quantity | Before Merge ($\log L_{\text{old}}$) | After Merge ($\log L_{\text{new}}$) |
+|---|---|---|
+| Total tokens in corpus | $N$ | $N' = N - c_{ab}$ |
+| Count of merged token $ab$ | $0$ | $c_{ab}$ |
+| Count of standalone $a$ | $c_a$ | $c'_a = c_a - c_{ab}$ |
+| Count of standalone $b$ | $c_b$ | $c'_b = c_b - c_{ab}$ |
+| Count of any other token $t \notin \{a, b, ab\}$ | $c_t$ | $c_t$ (unchanged) |
+
+Notice that merging $(a, b) \to ab$ does **not** just replace $c_{ab}$ pairs of $(a, b)$ in isolation:
+
+* **Leftover $a$'s and $b$'s lose probability mass:** Any unmerged instances of $a$ and $b$ sitting elsewhere in the corpus see their counts drop from $c_a \to c_a - c_{ab}$ and $c_b \to c_b - c_{ab}$.
+* **The entire corpus shrinks:** Every merged pair reduces the total token count of the corpus by $1$, shrinking the corpus size from $N$ to $N - c_{ab}$ and slightly boosting the probability $\frac{c_t}{N - c_{ab}}$ of *every other token in the vocabulary*.
+
+---
+
+## 2. The Exact Log-Likelihood Change ($\Delta \log L$)
+
+Let us compute the exact difference $\Delta \log L = \log L_{\text{new}} - \log L_{\text{old}}$. When we subtract $\log L_{\text{old}}$ from $\log L_{\text{new}}$, the $c_t \log c_t$ terms for all unrelated tokens ($t \notin \{a, b, ab\}$) cancel out completely because their counts do not change:
+
+$$\Delta \log L = c_{ab} \log c_{ab} + (c_a - c_{ab})\log(c_a - c_{ab}) + (c_b - c_{ab})\log(c_b - c_{ab}) - c_a \log c_a - c_b \log c_b - (N - c_{ab})\log(N - c_{ab}) + N \log N$$
+
+By splitting $c_a = c_{ab} + (c_a - c_{ab})$, $c_b = c_{ab} + (c_b - c_{ab})$, and $N = c_{ab} + (N - c_{ab})$, we can rearrange this exact equality into three interpretable pieces:
+
+$$\Delta \log L = \underbrace{c_{ab} \log \left( \frac{N \cdot c_{ab}}{c_a \, c_b} \right)}_{\text{Term 1: Primary PMI Gain}} + \underbrace{(c_a - c_{ab}) \log \left( 1 - \frac{c_{ab}}{c_a} \right) + (c_b - c_{ab}) \log \left( 1 - \frac{c_{ab}}{c_b} \right)}_{\text{Term 2: Penalty on leftover } a\text{'s and } b\text{'s}} - \underbrace{(N - c_{ab}) \log \left( 1 - \frac{c_{ab}}{N} \right)}_{\text{Term 3: Corpus shrinkage boost}}$$
+
+### Numerical Verification on a Toy Corpus
+
+Suppose $N = 1000$, $c_a = 100$, $c_b = 100$, and $c_{ab} = 50$ (using natural logarithms $\ln$):
+
+* **Term 1 (Textbook approximation):** $50 \ln\left(\frac{1000 \cdot 50}{100 \cdot 100}\right) = 50 \ln(5) \approx \mathbf{+80.47}$
+* **Term 2 (Leftover $a$ and $b$ penalty):** $50 \ln(1 - 0.5) + 50 \ln(1 - 0.5) = 100 \ln(0.5) \approx \mathbf{-69.31}$
+* **Term 3 (Corpus shrinkage boost from $N=1000 \to 950$):** $-950 \ln(1 - 0.05) \approx \mathbf{+48.73}$
+* **Exact $\Delta \log L$:** $80.47 - 69.31 + 48.73 = \mathbf{+59.89}$
+
+Notice how Term 2 (negative) and Term 3 (positive) pull in opposite directions and partially cancel each other out.
+
+---
+
+## 3. Why Terms 2 and 3 Can Be Ignored (First-Order Taylor Expansion)
+
+To see why Term 1 dominates in any realistic training corpus, we apply the first-order Taylor expansion for natural logarithms around $x = 0$:
+
+$$\ln(1 - x) \approx -x \quad \text{for small } x$$
+
+### Expanding Term 3 (The Corpus Shrinkage Boost)
+
+In a real training corpus, $N$ is in the millions or billions while the count of any single candidate pair $c_{ab}$ is small relative to $N$ ($c_{ab} \ll N$). Setting $x = \frac{c_{ab}}{N}$ gives:
+
+$$-(N - c_{ab}) \ln \left( 1 - \frac{c_{ab}}{N} \right) \approx -(N - c_{ab}) \left( -\frac{c_{ab}}{N} \right) = c_{ab} - \frac{c_{ab}^2}{N} \approx \mathbf{+c_{ab}}$$
+
+### Expanding Term 2 (The Leftover $a$ and $b$ Penalty)
+
+Consider the penalty for leftover standalone $a$'s, $(c_a - c_{ab}) \ln \left( 1 - \frac{c_{ab}}{c_a} \right)$, across its two boundary regimes:
+
+1. **When $c_{ab} \ll c_a$:** Applying $\ln(1 - \frac{c_{ab}}{c_a}) \approx -\frac{c_{ab}}{c_a}$ gives $(c_a - c_{ab})(-\frac{c_{ab}}{c_a}) \approx \mathbf{-c_{ab}}$ (and similarly $\mathbf{-c_{ab}}$ for $b$).
+2. **When $c_{ab} \to c_a$:** Almost every instance of $a$ is absorbed into $ab$, so $(c_a - c_{ab}) \to 0$ and the penalty vanishes to $\mathbf{0}$.
+
+Across the entire valid domain $0 \le c_{ab} \le \min(c_a, c_b)$, the combined penalty in Term 2 is strictly bounded between $-2c_{ab}$ and $0$.
+
+### Dominant Balance
+
+Summing Term 2 ($\in [-2c_{ab}, 0]$) and Term 3 ($\approx +c_{ab}$) produces a net linear correction bounded inside $[-c_{ab}, +c_{ab}]$. Factoring $c_{ab}$ out of the entire exact equation yields:
+
+$$\Delta \log L = c_{ab} \cdot \left[ \underbrace{\ln \left( \frac{N \cdot c_{ab}}{c_a \, c_b} \right)}_{\text{PMI of } a \text{ and } b} + \underbrace{\mathcal{O}(1)}_{\text{bounded in } [-1,\,+1]} \right]$$
+
+Because $N$ is massive, the logarithmic ratio $\ln\left(\frac{N \cdot c_{ab}}{c_a c_b}\right) = \ln \frac{P(ab)}{P(a)P(b)}$ dominates the bounded $\mathcal{O}(1)$ offset. Dropping that offset gives the classic first-order approximation:
+
+$$\Delta \log L \approx c_{ab} \cdot \log \frac{P(ab)}{P(a)\,P(b)}$$
+
+---
+
+## 4. From Total Gain to the Simplified Score (Average Gain per Occurrence)
+
+If we rank candidate merges directly by $\Delta \log L \approx c_{ab} \cdot \log \frac{P(ab)}{P(a)P(b)}$, notice that $c_{ab}$ sits **outside** the logarithm as a linear multiplier. Because a linear factor grows much faster than a logarithm, raw pair frequency ($c_{ab}$) will still dominate the ranking making the merge order behave almost identically to BPE.
+
+Furthermore, as long as $c_{ab}$ sits in front of the logarithm, we **cannot** algebraically drop the $\log$ or $N$, because bringing $c_{ab}$ inside the logarithm turns it into an exponent: $\log\left(\left(\frac{N \cdot c_{ab}}{c_a c_b}\right)^{c_{ab}}\right)$.
+
+Instead, simplified WordPiece shifts the objective from **total corpus log-likelihood gain** ($\Delta \log L$) to **average log-likelihood gain per merge occurrence** by dividing both sides by $c_{ab}$:
+
+$$\frac{\Delta \log L}{c_{ab}} \approx \log \frac{P(ab)}{P(a)\,P(b)}$$
+
+In information theory, this quantity is the **Pointwise Mutual Information (PMI)** between $a$ and $b$. Substituting $P(t) = \frac{c_t}{N}$ gives:
+
+$$\frac{\Delta \log L}{c_{ab}} \approx \log \left( N \cdot \frac{c_{ab}}{c_a \, c_b} \right)$$
+
+Now we can apply two lossless monotonic simplifications to rank candidate pairs:
+
+1. **Drop $\log(\cdot)$:** Because the logarithm is a strictly increasing function, $\log(x_1) > \log(x_2) \iff x_1 > x_2$ for all positive $x_1, x_2$.
+2. **Drop $N$:** At any given step of the merge loop, the total token count $N$ is an identical positive constant for every candidate pair $(a, b)$.
+
+Stripping away $\log$ and $N$ preserves the exact ranking order of $\frac{\Delta \log L}{c_{ab}}$ and yields the standard WordPiece scoring rule:
+
+$$\text{score}(a,b) = \frac{c_{ab}}{c_a \cdot c_b} = \frac{\text{count}(ab)}{\text{count}(a) \cdot \text{count}(b)}$$
+
+---
+
+## References
+
+1. M. Schuster, K. Nakajima. *Japanese and Korean Voice Search.* ICASSP 2012.
+2. J. Devlin et al. *BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding.* NAACL 2019. arXiv:1810.04805.
+3. X. Song et al. *Fast WordPiece Tokenization.* EMNLP 2021. arXiv:2012.15524.
+
+---
+
+This work is licensed under CC BY-SA 4.0.

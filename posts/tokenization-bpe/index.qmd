@@ -1,0 +1,311 @@
+---
+title: "Tokenization and Byte-Pair Encoding: How LLMs Turn Text into Numbers"
+description: "Why language models don't read characters or words, how BPE builds a vocabulary by merging frequent pairs, and what that means in practice."
+date: 2026-10-31
+categories: [LLMs, tokenization, BPE, fundamentals]
+license: "CC BY-SA 4.0"
+draft: false
+---
+
+A language model never sees text. It sees a sequence of integers. The component that turns text into those integers (and back) is the **tokenizer**, and its design quietly shapes cost, context length, multilingual quality and even arithmetic ability.
+
+This article covers the one idea behind almost every modern tokenizer, **subword tokenization**, with Byte-Pair Encoding (BPE) as the main example. We build it by hand, implement it in about 40 lines of Python, then look at its cousins (WordPiece, Unigram), the byte-level trick that removes "unknown" tokens, and the special tokens that structure chat prompts.
+
+## 1. Why not characters, and why not words?
+
+Pick a granularity for the pieces ("tokens") the model reads. There are three obvious options, and two of them fail in opposite directions.
+
+- **Whole words.** The vocabulary must contain every word the model might meet. Real text keeps producing new ones: names, typos, product codes, and in languages like German, compounds such as *Abwasserbehandlungsanlage* ("sewage water treatment plant"). A word-level model maps anything outside its vocabulary to a single `<unk>` placeholder and loses the information.
+- **Characters.** Nothing is ever unknown, but sequences get long. A transformer's self-attention compares every position with every other, so its cost grows with $n^2$, where $n$ is the sequence length in tokens. Longer sequences also push related pieces of information further apart.
+- **Subwords.** Frequent words stay whole; rare words are assembled from smaller pieces the model has seen before.
+
+Sennrich et al. (2016) measured this trade-off on a German training corpus of about 100 million words:
+
+| Segmentation | Tokens in corpus | Distinct tokens (vocabulary) |
+|---|---|---|
+| Whole words | 100 M | 1,750,000 |
+| Characters | 550 M | 3,000 |
+| BPE (59,500 merges) | 112 M | 63,000 |
+
+: German training corpus statistics, from Sennrich et al. (2016), Table 1. {tbl-colwidths="[40,30,30]"}
+
+Characters make the text 5.5× longer, which for a transformer means roughly $5.5^2 \approx 30\times$ more attention work. Words need a vocabulary 28× bigger than BPE's. BPE sits in the middle: it turns the same text into only about 12% more tokens than word-level splitting (112M vs 100M), with a vocabulary small enough to fit in an embedding table.
+
+## 2. BPE by hand
+
+BPE comes from data compression (Gage, 1994): repeatedly replace the most frequent pair of adjacent bytes with a new, unused byte. Sennrich et al. adapted it to words: repeatedly merge the most frequent pair of adjacent *symbols* into one new symbol.
+
+The learning loop:
+
+1. Start with a vocabulary of single characters. Write every word in the corpus as a sequence of characters.
+2. Count every adjacent pair of symbols, weighted by how often each word occurs.
+3. Merge the most frequent pair into a new symbol, add it to the vocabulary, and rewrite the corpus.
+4. Repeat steps 2–3 for $k$ merges.
+
+```{mermaid}
+flowchart LR
+    A["Corpus as<br/>characters"] --> B["Count adjacent<br/>pairs (weighted)"]
+    B --> C["Pick the most<br/>frequent pair"]
+    C --> D["Merge it into a<br/>new symbol"]
+    D --> E["Rewrite corpus,<br/>record the merge"]
+    E -->|"fewer than k merges"| B
+    E -->|"k merges done"| F["Output: base symbols<br/>+ ordered merge list"]
+```
+
+### A tiny corpus
+
+Word counts: `hug` ×10, `pug` ×5, `pun` ×12, `bun` ×4, `hugs` ×5. The base vocabulary is the seven characters `b g h n p s u`.
+
+**Merge 1.** Pair counts: `u g` = 10 + 5 + 5 = **20**, `p u` = 5 + 12 = 17, `u n` = 12 + 4 = 16, `h u` = 15, `g s` = 5, `b u` = 4. Winner: `u g` → `ug`.
+
+After rewriting, the corpus is `h ug` ×10, `p ug` ×5, `p u n` ×12, `b u n` ×4, `h ug s` ×5.
+
+**Merge 2.** Counts are recomputed on the *rewritten* corpus. `pug` is now `p ug`, so it no longer contributes to `p u`, which drops from 17 to 12. Now `u n` = 16 is the top pair → `un`.
+
+**Merge 3.** `h ug` = 10 + 5 = 15 wins → `hug`.
+
+| Step | Merged pair | Count | New symbol |
+|---|---|---|---|
+| 1 | `u` + `g` | 20 | `ug` |
+| 2 | `u` + `n` | 16 | `un` |
+| 3 | `h` + `ug` | 15 | `hug` |
+
+Merging adds a symbol; it does not remove the old ones. `u` and `g` stay in the vocabulary (they still appear on their own in `pun` and `bun`). So the final vocabulary is
+
+$$|V| = |V_0| + k$$
+
+where $|V|$ is the final vocabulary size, $|V_0|$ is the number of starting symbols (here 7), and $k$ is the number of merges (here 3), giving 10 symbols. The merge count $k$ is the algorithm's only hyperparameter.
+
+### Using the merges on new text
+
+Learning produces an **ordered list of merges**. To tokenize any word, split it into characters, then replay the merges in the order they were learned.
+
+```{mermaid}
+flowchart LR
+    W["bugs"] --> S["b · u · g · s"]
+    S -->|"merge 1: u+g"| M1["b · ug · s"]
+    M1 -->|"merge 2: u+n"| M2["no match"]
+    M2 -->|"merge 3: h+ug"| M3["no match"]
+    M3 --> R["tokens: b, ug, s"]
+```
+
+`bugs` never appeared in training, yet it becomes `b`, `ug`, `s`, all known symbols. That is the "open vocabulary" property: any word made of known characters can be encoded.
+
+Two details from the original paper:
+
+- Merges never cross word boundaries, so the algorithm runs on a word-frequency dictionary, which is much faster than scanning raw text.
+- Sennrich et al. added a special end-of-word symbol to each word so the original spacing can be restored after translation. Other tokenizers use other conventions (a leading-space marker, or a continuation marker such as `##`), but the goal is the same: be able to reconstruct the text exactly.
+
+## 3. When characters themselves are unknown
+
+Try `mug` with our merges. The letter `m` was never in the corpus, so it is not in the base vocabulary, and the tokenizer can only emit `<unk>` for it. The original paper notes this limitation: the only symbols unknown at test time are unseen characters, or symbols whose every occurrence in the training text was merged into larger ones. The second case is rarer. A symbol can stay in the merge list but vanish from the segmented training text. Our toy shows the same thing. After five merges the segmented corpus is `hug` ×10, `pug` ×5, `pun` ×12, `b un` ×4, `hug s` ×5. The symbol `ug` is still in the merge list (it was merge 1), so it counts towards the vocabulary size. But in the segmented text it never stands alone: every `ug` now sits inside `hug` or `pug`. A network trained on this text gets no training examples for `ug` by itself. Yet a new word like `bug` is split by replaying the merges into `b` + `ug`, which hands the network a symbol it has never seen on its own. In practice the paper left such infrequent subword units out of the network’s vocabulary, so such a symbol is simply unknown to the model. The paper’s own example is `safeguar`, which only ever occurred inside `safeguard`. The authors saw no such cases at test time, and note they could be fixed by undoing specific merges.
+
+Unicode contains well over a hundred thousand characters, so a base vocabulary of "every character" is large and still incomplete. **Byte-level BPE** fixes this by starting from bytes instead of characters. Every string, in any script, is a sequence of UTF-8 bytes, so a base vocabulary of just 256 entries can encode anything and unknown tokens become impossible. GPT-2 popularised this: its vocabulary of 50,257 entries is 256 byte tokens, 50,000 learned merges and one special end-of-text token.
+
+The cost is that non-Latin text starts out longer. In UTF-8, `é` takes 2 bytes, an emoji 4 bytes, and the Hindi word `नमस्ते` (6 characters) takes 18 bytes. Until merges cover those byte patterns, such text costs many more tokens than English. We come back to this below.
+
+A related fix is *byte fallback* in SentencePiece-style tokenizers: keep a normal character vocabulary, and decompose rare characters into byte tokens only when needed.
+
+## 4. The cousins: WordPiece and Unigram
+
+BPE is not the only way to choose a subword vocabulary. Two others are also worth knowing atleast at the intuition level.
+
+**WordPiece** (Schuster & Nakajima, 2012; used by BERT, Devlin et al., 2019) also grows its vocabulary bottom-up, but chooses merges by their effect on the likelihood of the training data, not by raw count. The original criterion is the total likelihood gain. The version taught in most tutorials is a simplification that ranks pairs by the gain per occurrence (see the [complete mathematical derivation here](wordpiece-likelihood-proof.qmd)).
+
+In practice, that reduces to ranking candidate pairs $(a, b)$ by
+
+$$\text{score}(a,b) = \frac{\text{count}(ab)}{\text{count}(a)\,\cdot\,\text{count}(b)}$$
+
+where $\text{count}(ab)$ is how often $a$ and $b$ occur side by side as a pair, and $\text{count}(a)$, $\text{count}(b)$ are how often each piece occurs anywhere in the corpus.
+
+*Why the denominator matters.* Notice that we can rewrite the score as $\frac{\text{count}(ab)}{\text{count}(a)} \cdot \frac{1}{\text{count}(b)}$, where $\frac{\text{count}(ab)}{\text{count}(a)}$ is basically $P(b \text{ follows } a \mid a \text{ just appeared})$. Let's consider a pair of very common letters like `e` and `s` and let's say, $\text{count}(es) = 1{,}000$, $\text{count}(e) = 20{,}000$ and $\text{count}(s) = 15{,}000$. That means only $5\%$ of `e`'s are actually followed by `s`, and the huge denominator ($20{,}000 \times 15{,}000$) pushes the score down to $3.3 \times 10^{-6}$. Conversely, `q` and `u` might only appear together $150$ times, but almost every `q` is followed by `u` ($\text{count}(q) = 150$, $\text{count}(u) = 3{,}000$), giving a score of $3.3 \times 10^{-4}$, which is a hundred times higher despite being seven times rarer. While BPE merges the most *frequent* neighbours first, WordPiece merges the most *mutually predictive* ("sticky") neighbours first.
+
+At encoding time, rather than replaying a merge list, WordPiece splits each word greedily by matching the longest known vocabulary entry from left to right.
+
+**Unigram LM** (Kudo, 2018) works top-down. Start with a very large candidate vocabulary and prune. It assumes each subword occurs independently, so a segmentation $\mathbf{x} = (x_1, \dots, x_M)$ of a sentence has probability
+
+$$P(\mathbf{x}) = \prod_{i=1}^{M} p(x_i)$$
+
+where $M$ is the number of pieces and $p(x_i)$ is the probability of piece $x_i$. The best segmentation is the one with the highest $P(\mathbf{x})$. Training repeatedly estimates the probabilities $p(\cdot)$, measures how much the total likelihood would drop if each piece were removed, and discards the least useful ones. A side effect is that Unigram can output several plausible segmentations with probabilities, which Kudo used as a regulariser during training.
+
+**SentencePiece** (Kudo & Richardson, 2018) is a *library*, not an algorithm: it can train either BPE or Unigram models, and it treats whitespace as an ordinary symbol so it needs no language-specific pre-splitting.
+
+Rough map of who uses what (as publicly documented):
+
+| Family | Examples |
+|---|---|
+| Byte-level BPE | GPT-2; the OpenAI `tiktoken` encodings; Llama 3 (128K vocabulary: 100K tokens from `tiktoken` plus 28K added for non-English languages) |
+| SentencePiece BPE | Llama 2 (32K vocabulary) |
+| WordPiece | BERT and its relatives |
+| SentencePiece Unigram | T5, XLNet |
+
+## 5. Practical consequences
+
+**Vocabulary size is a trade-off, not a constant.** A larger vocabulary shortens sequences (cheaper, more text fits in context because it possesses specific tokens for many whole words) but makes the embedding table and output layer bigger and gives rare tokens fewer training examples. Real systems range from about 30K (BERT) to 128K (Llama 3) and beyond. Sennrich et al. themselves describe their choice of vocabulary size as "somewhat arbitrary".
+
+**Fertility.** The *fertility* of a tokenizer on a text is the average number of tokens per word:
+
+$$f = \frac{\text{number of tokens}}{\text{number of words}}$$
+
+The minimum is $f = 1$, meaning every word is a single token. Higher is worse: more tokens means a higher bill, less room in the context window and more latency. Rust et al. (2021) show fertility rising sharply for languages that are poorly covered by a tokenizer's vocabulary. The Llama 3 report quotes an average compression gain on English from 3.17 to 3.94 characters per token versus Llama 2, which is the same idea measured the other way around.
+
+**Numbers.** A plain BPE vocabulary can split numbers inconsistently ("2024" might be one token while "2025" is two), which hurts arithmetic because digits no longer line up by place value. Tokenizers address this differently. Per a Hugging Face write-up on the topic, Llama 1/2 split every number into single digits, while Llama 3 groups digits in chunks of up to three. There is no single right answer; the point is that the *choice* is made in the tokenizer, before the model ever trains.
+
+**Code.** Indentation and repeated whitespace can burn many tokens unless the vocabulary contains merged whitespace pieces. Code-heavy training data usually leads to those being learned.
+
+## 6. Special tokens and chat templates
+
+Some vocabulary entries are not learned from text. **Special tokens** are reserved symbols that carry *structure*, not language. They must stay atomic: the tokenizer must never split them into characters.
+
+| Token (typical role) | Purpose |
+|---|---|
+| Beginning-of-sequence (BOS) | Marks where a sequence starts |
+| End-of-sequence (EOS) | The model emits it to say "I'm done"; generation stops when it appears |
+| Padding (PAD) | Fills shorter sequences in a batch to equal length; masked out of attention |
+| Role markers | Mark who is speaking (system, user, assistant) in chat models |
+
+Not every tokenizer has all of them. GPT-2, for instance, has exactly one special token, end-of-text.
+
+Chat models are trained on conversations flattened into one token stream with role markers. A purely illustrative example (real markers differ between model families):
+
+```text
+<|system|> You are a helpful assistant. <|end|>
+<|user|> Explain BPE in one sentence. <|end|>
+<|assistant|>
+```
+
+The model then continues from `<|assistant|>` until it emits its end-of-turn token. Because every family uses different markers, never hand-build these strings. Use the tokenizer's own chat template (shown below). It is also why EOS matters so much: a model that cannot emit its stop token keeps generating until a length limit cuts it off.
+
+## 7. Code
+
+### BPE from scratch
+
+```python
+from collections import Counter
+
+def get_pair_counts(corpus):
+    """corpus: {tuple_of_symbols: count} -> Counter of adjacent pairs."""
+    pairs = Counter()
+    for symbols, freq in corpus.items():
+        for a, b in zip(symbols, symbols[1:]):
+            pairs[(a, b)] += freq
+    return pairs
+
+def apply_merge(corpus, pair):
+    """Replace every adjacent occurrence of `pair` with the merged symbol."""
+    merged = pair[0] + pair[1]
+    new_corpus = {}
+    for symbols, freq in corpus.items():
+        out, i = [], 0
+        while i < len(symbols):
+            if i < len(symbols) - 1 and (symbols[i], symbols[i + 1]) == pair:
+                out.append(merged); i += 2
+            else:
+                out.append(symbols[i]); i += 1
+        key = tuple(out)
+        new_corpus[key] = new_corpus.get(key, 0) + freq
+    return new_corpus
+
+def train_bpe(word_counts, num_merges):
+    corpus = {tuple(w): c for w, c in word_counts.items()}
+    base_vocab = sorted({ch for w in word_counts for ch in w})
+    merges = []
+    for _ in range(num_merges):
+        pairs = get_pair_counts(corpus)
+        if not pairs:
+            break
+        best, count = pairs.most_common(1)[0]   # ties: first pair seen wins
+        corpus = apply_merge(corpus, best)
+        merges.append((best, count))
+    return base_vocab, merges
+
+def encode(word, merges, base_vocab):
+    """Split into characters, then replay the merges in learned order."""
+    symbols = tuple(word)
+    for pair, _ in merges:
+        symbols = next(iter(apply_merge({symbols: 1}, pair)))
+    return [s if (len(s) > 1 or s in base_vocab) else "<unk>" for s in symbols]
+
+counts = {"hug": 10, "pug": 5, "pun": 12, "bun": 4, "hugs": 5}
+base, merges = train_bpe(counts, 3)
+for pair, c in merges:
+    print(pair, c)
+print(encode("bugs", merges, base))   # ['b', 'ug', 's']
+print(encode("mug", merges, base))    # ['<unk>', 'ug']
+```
+
+Output:
+
+```text
+('u', 'g') 20
+('u', 'n') 16
+('h', 'ug') 15
+['b', 'ug', 's']
+['<unk>', 'ug']
+```
+
+Real implementations add the pieces we skipped: an end-of-word or leading-space convention, byte-level base symbols, and incremental pair-count updates instead of recounting the corpus on every merge.
+
+### A real tokenizer with Hugging Face `transformers`
+
+```python
+from transformers import AutoTokenizer
+
+tok = AutoTokenizer.from_pretrained("gpt2")        # byte-level BPE, 50,257 entries
+
+text = "Tokenization is unbelievably useful."
+ids = tok.encode(text)
+print(ids)                                          # integer IDs
+print(tok.convert_ids_to_tokens(ids))               # the subword pieces
+assert tok.decode(ids) == text                      # lossless round trip
+
+# Chat models ship their own template; use it instead of hand-built strings.
+chat_tok = AutoTokenizer.from_pretrained("<a-chat-model-name>")
+messages = [{"role": "user", "content": "Explain BPE in one sentence."}]
+prompt = chat_tok.apply_chat_template(
+    messages, tokenize=False, add_generation_prompt=True
+)
+print(prompt)                                       # shows the model's real markers
+```
+
+Run it with a few of your own sentences, including another language and some code, and compare token counts. Seeing the pieces is the fastest way to build intuition.
+
+## 8. Common pitfalls
+
+- **Tokens are not words.** English averages a bit over one token per word, but the ratio varies a lot by language and domain. Estimate cost and context use in tokens, never in words.
+- **The tokenizer belongs to the model.** IDs only mean something to the vocabulary and embedding table they were trained with. Swapping tokenizers without retraining breaks the model silently.
+- **Whitespace is part of the token.** In many tokenizers `hello` and ` hello` (with a leading space) are different tokens. A stray trailing space in a prompt can change what the model sees.
+- **Unknown characters.** A character-level base vocabulary can emit `<unk>` and lose information. Byte-level BPE avoids this, at the cost of longer sequences for scripts that UTF-8 encodes in several bytes.
+- **Inconsistent number splitting.** Do not assume digits are tokenized the same way across models or even across similar numbers. Check before trusting a model on arithmetic or on parsing numeric IDs.
+- **Reading a high fertility as "the model is bad at this language".** It is a symptom of tokenizer coverage, and it directly raises cost and shrinks effective context. Measure it on your own text.
+- **Hand-writing chat templates.** A single wrong role marker or missing end-of-turn token can degrade output with no error. Use the template that ships with the tokenizer.
+- **Letting user text become control tokens.** If user-supplied text containing a special-token string is parsed as the real special token, it can corrupt the prompt structure. Treat user text as plain text.
+- **Adding new special tokens and expecting them to work.** Tokens added after pretraining get embeddings that are untrained until fine-tuning teaches the model what they mean.
+- **Mismatched tokenization between training stages.** Anything that compares two models' token probabilities (as RL fine-tuning methods do) requires both to use identical tokenization and special-token handling.
+
+## Takeaways
+
+- Models read integers; the tokenizer is the translation layer and it is learned from data.
+- Subwords give a middle path: short sequences and an open vocabulary.
+- BPE learns an ordered list of merges. Learn by repeatedly merging the most frequent pair (recounting each time), encode by replaying the merges in order.
+- Vocabulary size = base symbols + merges.
+- Byte-level BPE guarantees no unknown tokens; special tokens add structure; and tokenizer choices, from vocabulary size to digit handling, directly affect cost and capability.
+
+## References
+
+1. R. Sennrich, B. Haddow, A. Birch. *Neural Machine Translation of Rare Words with Subword Units.* ACL 2016. arXiv:1508.07909.
+2. P. Gage. *A New Algorithm for Data Compression.* C Users Journal 12(2), 1994.
+3. A. Radford et al. *Language Models are Unsupervised Multitask Learners.* OpenAI, 2019 (GPT-2).
+4. M. Schuster, K. Nakajima. *Japanese and Korean Voice Search.* ICASSP 2012.
+5. J. Devlin et al. *BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding.* 2019. arXiv:1810.04805.
+6. T. Kudo. *Subword Regularization: Improving Neural Network Translation Models with Multiple Subword Candidates.* ACL 2018. arXiv:1804.10959.
+7. T. Kudo, J. Richardson. *SentencePiece: A simple and language independent subword tokenizer and detokenizer for Neural Text Processing.* EMNLP 2018 (System Demonstrations). arXiv:1808.06226.
+8. A. Grattafiori et al. *The Llama 3 Herd of Models.* 2024. arXiv:2407.21783.
+9. P. Rust et al. *How Good is Your Tokenizer? On the Monolingual Performance of Multilingual Language Models.* ACL-IJCNLP 2021. arXiv:2012.15613.
+10. A. Vaswani et al. *Attention Is All You Need.* 2017. arXiv:1706.03762.
+11. Hugging Face. *Number tokenization* write-up on digit handling in GPT-2, Llama and DeepSeek tokenizers. <https://huggingface.co/spaces/huggingface/number-tokenization-blog>
+12. OpenAI. `tiktoken` (BPE tokenizer library and encodings). <https://github.com/openai/tiktoken>
+
+---
+
+This work adapts material from “The Hitchhiker’s Guide to Agentic AI” by Haggai Roitman (arXiv:2606.24937v3, book version 1.4), licensed under CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/). Changes: adapted into standalone articles, with added explanations, diagrams and examples. This work is licensed under CC BY-SA 4.0.
