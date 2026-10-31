@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.20">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="dcterms.date" content="2026-10-31">
+<meta name="description" content="Why language models don’t read characters or words, how BPE builds a vocabulary by merging frequent pairs, and what that means in practice.">
+
+<title>Tokenization and Byte-Pair Encoding: How LLMs Turn Text into Numbers – Agentic AI Notes</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../../">
+<script src="../../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../../site_libs/quarto-html/popper.min.js"></script>
+<script src="../../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../../site_libs/quarto-html/quarto-syntax-highlighting-17888a1159294d3eb470f19f6f52f5a5.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../../site_libs/bootstrap/bootstrap-17e92714493fce31463ccfbbc8488715.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+<script src="../../site_libs/quarto-diagram/mermaid.min.js"></script>
+<script src="../../site_libs/quarto-diagram/mermaid-init.js"></script>
+<link href="../../site_libs/quarto-diagram/mermaid.css" rel="stylesheet">
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../../styles.css">
+</head>
+
+<body class="nav-fixed quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a class="navbar-brand" href="../../index.html">
+    <span class="navbar-title">Agentic AI Notes</span>
+    </a>
+  </div>
+            <div id="quarto-search" class="" title="Search"></div>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+  <span class="navbar-toggler-icon"></span>
+</button>
+          <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav navbar-nav-scroll me-auto">
+  <li class="nav-item">
+    <a class="nav-link" href="../../index.html"> 
+<span class="menu-text">Home</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../blog.html"> 
+<span class="menu-text">Articles</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../about.html"> 
+<span class="menu-text">About</span></a>
+  </li>  
+</ul>
+          </div> <!-- /navcollapse -->
+            <div class="quarto-navbar-tools">
+</div>
+      </div> <!-- /container-fluid -->
+    </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">On this page</h2>
+   
+  <ul>
+  <li><a href="#why-not-characters-and-why-not-words" id="toc-why-not-characters-and-why-not-words" class="nav-link active" data-scroll-target="#why-not-characters-and-why-not-words">1. Why not characters, and why not words?</a></li>
+  <li><a href="#bpe-by-hand" id="toc-bpe-by-hand" class="nav-link" data-scroll-target="#bpe-by-hand">2. BPE by hand</a>
+  <ul class="collapse">
+  <li><a href="#a-tiny-corpus" id="toc-a-tiny-corpus" class="nav-link" data-scroll-target="#a-tiny-corpus">A tiny corpus</a></li>
+  <li><a href="#using-the-merges-on-new-text" id="toc-using-the-merges-on-new-text" class="nav-link" data-scroll-target="#using-the-merges-on-new-text">Using the merges on new text</a></li>
+  </ul></li>
+  <li><a href="#when-characters-themselves-are-unknown" id="toc-when-characters-themselves-are-unknown" class="nav-link" data-scroll-target="#when-characters-themselves-are-unknown">3. When characters themselves are unknown</a></li>
+  <li><a href="#the-cousins-wordpiece-and-unigram" id="toc-the-cousins-wordpiece-and-unigram" class="nav-link" data-scroll-target="#the-cousins-wordpiece-and-unigram">4. The cousins: WordPiece and Unigram</a></li>
+  <li><a href="#practical-consequences" id="toc-practical-consequences" class="nav-link" data-scroll-target="#practical-consequences">5. Practical consequences</a></li>
+  <li><a href="#special-tokens-and-chat-templates" id="toc-special-tokens-and-chat-templates" class="nav-link" data-scroll-target="#special-tokens-and-chat-templates">6. Special tokens and chat templates</a></li>
+  <li><a href="#code" id="toc-code" class="nav-link" data-scroll-target="#code">7. Code</a>
+  <ul class="collapse">
+  <li><a href="#bpe-from-scratch" id="toc-bpe-from-scratch" class="nav-link" data-scroll-target="#bpe-from-scratch">BPE from scratch</a></li>
+  <li><a href="#a-real-tokenizer-with-hugging-face-transformers" id="toc-a-real-tokenizer-with-hugging-face-transformers" class="nav-link" data-scroll-target="#a-real-tokenizer-with-hugging-face-transformers">A real tokenizer with Hugging Face <code>transformers</code></a></li>
+  </ul></li>
+  <li><a href="#common-pitfalls" id="toc-common-pitfalls" class="nav-link" data-scroll-target="#common-pitfalls">8. Common pitfalls</a></li>
+  <li><a href="#takeaways" id="toc-takeaways" class="nav-link" data-scroll-target="#takeaways">Takeaways</a></li>
+  <li><a href="#references" id="toc-references" class="nav-link" data-scroll-target="#references">References</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Tokenization and Byte-Pair Encoding: How LLMs Turn Text into Numbers</h1>
+  <div class="quarto-categories">
+    <div class="quarto-category">LLMs</div>
+    <div class="quarto-category">tokenization</div>
+    <div class="quarto-category">BPE</div>
+    <div class="quarto-category">fundamentals</div>
+  </div>
+  </div>
+
+<div>
+  <div class="description">
+    Why language models don’t read characters or words, how BPE builds a vocabulary by merging frequent pairs, and what that means in practice.
+  </div>
+</div>
+
+
+<div class="quarto-title-meta">
+
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">October 31, 2026</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>A language model never sees text. It sees a sequence of integers. The component that turns text into those integers (and back) is the <strong>tokenizer</strong>, and its design quietly shapes cost, context length, multilingual quality and even arithmetic ability.</p>
+<p>This article covers the one idea behind almost every modern tokenizer, <strong>subword tokenization</strong>, with Byte-Pair Encoding (BPE) as the main example. We build it by hand, implement it in about 40 lines of Python, then look at its cousins (WordPiece, Unigram), the byte-level trick that removes “unknown” tokens, and the special tokens that structure chat prompts.</p>
+<section id="why-not-characters-and-why-not-words" class="level2">
+<h2 class="anchored" data-anchor-id="why-not-characters-and-why-not-words">1. Why not characters, and why not words?</h2>
+<p>Pick a granularity for the pieces (“tokens”) the model reads. There are three obvious options, and two of them fail in opposite directions.</p>
+<ul>
+<li><strong>Whole words.</strong> The vocabulary must contain every word the model might meet. Real text keeps producing new ones: names, typos, product codes, and in languages like German, compounds such as <em>Abwasserbehandlungsanlage</em> (“sewage water treatment plant”). A word-level model maps anything outside its vocabulary to a single <code>&lt;unk&gt;</code> placeholder and loses the information.</li>
+<li><strong>Characters.</strong> Nothing is ever unknown, but sequences get long. A transformer’s self-attention compares every position with every other, so its cost grows with <span class="math inline">\(n^2\)</span>, where <span class="math inline">\(n\)</span> is the sequence length in tokens. Longer sequences also push related pieces of information further apart.</li>
+<li><strong>Subwords.</strong> Frequent words stay whole; rare words are assembled from smaller pieces the model has seen before.</li>
+</ul>
+<p>Sennrich et al.&nbsp;(2016) measured this trade-off on a German training corpus of about 100 million words:</p>
+<table class="caption-top table">
+<caption>German training corpus statistics, from Sennrich et al.&nbsp;(2016), Table 1.</caption>
+<colgroup>
+<col style="width: 40%">
+<col style="width: 30%">
+<col style="width: 30%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Segmentation</th>
+<th>Tokens in corpus</th>
+<th>Distinct tokens (vocabulary)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Whole words</td>
+<td>100 M</td>
+<td>1,750,000</td>
+</tr>
+<tr class="even">
+<td>Characters</td>
+<td>550 M</td>
+<td>3,000</td>
+</tr>
+<tr class="odd">
+<td>BPE (59,500 merges)</td>
+<td>112 M</td>
+<td>63,000</td>
+</tr>
+</tbody>
+</table>
+<p>Characters make the text 5.5× longer, which for a transformer means roughly <span class="math inline">\(5.5^2 \approx 30\times\)</span> more attention work. Words need a vocabulary 28× bigger than BPE’s. BPE sits in the middle: it turns the same text into only about 12% more tokens than word-level splitting (112M vs 100M), with a vocabulary small enough to fit in an embedding table.</p>
+</section>
+<section id="bpe-by-hand" class="level2">
+<h2 class="anchored" data-anchor-id="bpe-by-hand">2. BPE by hand</h2>
+<p>BPE comes from data compression (Gage, 1994): repeatedly replace the most frequent pair of adjacent bytes with a new, unused byte. Sennrich et al.&nbsp;adapted it to words: repeatedly merge the most frequent pair of adjacent <em>symbols</em> into one new symbol.</p>
+<p>The learning loop:</p>
+<ol type="1">
+<li>Start with a vocabulary of single characters. Write every word in the corpus as a sequence of characters.</li>
+<li>Count every adjacent pair of symbols, weighted by how often each word occurs.</li>
+<li>Merge the most frequent pair into a new symbol, add it to the vocabulary, and rewrite the corpus.</li>
+<li>Repeat steps 2–3 for <span class="math inline">\(k\)</span> merges.</li>
+</ol>
+<div class="cell" data-layout-align="default">
+<div class="cell-output-display">
+<div>
+<p></p><figure class="figure"><p></p>
+<div>
+<pre class="mermaid mermaid-js">flowchart LR
+    A["Corpus as&lt;br/&gt;characters"] --&gt; B["Count adjacent&lt;br/&gt;pairs (weighted)"]
+    B --&gt; C["Pick the most&lt;br/&gt;frequent pair"]
+    C --&gt; D["Merge it into a&lt;br/&gt;new symbol"]
+    D --&gt; E["Rewrite corpus,&lt;br/&gt;record the merge"]
+    E --&gt;|"fewer than k merges"| B
+    E --&gt;|"k merges done"| F["Output: base symbols&lt;br/&gt;+ ordered merge list"]
+</pre>
+</div>
+<p></p></figure><p></p>
+</div>
+</div>
+</div>
+<section id="a-tiny-corpus" class="level3">
+<h3 class="anchored" data-anchor-id="a-tiny-corpus">A tiny corpus</h3>
+<p>Word counts: <code>hug</code> ×10, <code>pug</code> ×5, <code>pun</code> ×12, <code>bun</code> ×4, <code>hugs</code> ×5. The base vocabulary is the seven characters <code>b g h n p s u</code>.</p>
+<p><strong>Merge 1.</strong> Pair counts: <code>u g</code> = 10 + 5 + 5 = <strong>20</strong>, <code>p u</code> = 5 + 12 = 17, <code>u n</code> = 12 + 4 = 16, <code>h u</code> = 15, <code>g s</code> = 5, <code>b u</code> = 4. Winner: <code>u g</code> → <code>ug</code>.</p>
+<p>After rewriting, the corpus is <code>h ug</code> ×10, <code>p ug</code> ×5, <code>p u n</code> ×12, <code>b u n</code> ×4, <code>h ug s</code> ×5.</p>
+<p><strong>Merge 2.</strong> Counts are recomputed on the <em>rewritten</em> corpus. <code>pug</code> is now <code>p ug</code>, so it no longer contributes to <code>p u</code>, which drops from 17 to 12. Now <code>u n</code> = 16 is the top pair → <code>un</code>.</p>
+<p><strong>Merge 3.</strong> <code>h ug</code> = 10 + 5 = 15 wins → <code>hug</code>.</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Step</th>
+<th>Merged pair</th>
+<th>Count</th>
+<th>New symbol</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>1</td>
+<td><code>u</code> + <code>g</code></td>
+<td>20</td>
+<td><code>ug</code></td>
+</tr>
+<tr class="even">
+<td>2</td>
+<td><code>u</code> + <code>n</code></td>
+<td>16</td>
+<td><code>un</code></td>
+</tr>
+<tr class="odd">
+<td>3</td>
+<td><code>h</code> + <code>ug</code></td>
+<td>15</td>
+<td><code>hug</code></td>
+</tr>
+</tbody>
+</table>
+<p>Merging adds a symbol; it does not remove the old ones. <code>u</code> and <code>g</code> stay in the vocabulary (they still appear on their own in <code>pun</code> and <code>bun</code>). So the final vocabulary is</p>
+<p><span class="math display">\[|V| = |V_0| + k\]</span></p>
+<p>where <span class="math inline">\(|V|\)</span> is the final vocabulary size, <span class="math inline">\(|V_0|\)</span> is the number of starting symbols (here 7), and <span class="math inline">\(k\)</span> is the number of merges (here 3), giving 10 symbols. The merge count <span class="math inline">\(k\)</span> is the algorithm’s only hyperparameter.</p>
+</section>
+<section id="using-the-merges-on-new-text" class="level3">
+<h3 class="anchored" data-anchor-id="using-the-merges-on-new-text">Using the merges on new text</h3>
+<p>Learning produces an <strong>ordered list of merges</strong>. To tokenize any word, split it into characters, then replay the merges in the order they were learned.</p>
+<div class="cell" data-layout-align="default">
+<div class="cell-output-display">
+<div>
+<p></p><figure class="figure"><p></p>
+<div>
+<pre class="mermaid mermaid-js">flowchart LR
+    W["bugs"] --&gt; S["b · u · g · s"]
+    S --&gt;|"merge 1: u+g"| M1["b · ug · s"]
+    M1 --&gt;|"merge 2: u+n"| M2["no match"]
+    M2 --&gt;|"merge 3: h+ug"| M3["no match"]
+    M3 --&gt; R["tokens: b, ug, s"]
+</pre>
+</div>
+<p></p></figure><p></p>
+</div>
+</div>
+</div>
+<p><code>bugs</code> never appeared in training, yet it becomes <code>b</code>, <code>ug</code>, <code>s</code>, all known symbols. That is the “open vocabulary” property: any word made of known characters can be encoded.</p>
+<p>Two details from the original paper:</p>
+<ul>
+<li>Merges never cross word boundaries, so the algorithm runs on a word-frequency dictionary, which is much faster than scanning raw text.</li>
+<li>Sennrich et al.&nbsp;added a special end-of-word symbol to each word so the original spacing can be restored after translation. Other tokenizers use other conventions (a leading-space marker, or a continuation marker such as <code>##</code>), but the goal is the same: be able to reconstruct the text exactly.</li>
+</ul>
+</section>
+</section>
+<section id="when-characters-themselves-are-unknown" class="level2">
+<h2 class="anchored" data-anchor-id="when-characters-themselves-are-unknown">3. When characters themselves are unknown</h2>
+<p>Try <code>mug</code> with our merges. The letter <code>m</code> was never in the corpus, so it is not in the base vocabulary, and the tokenizer can only emit <code>&lt;unk&gt;</code> for it. The original paper notes this limitation: the only symbols unknown at test time are unseen characters, or symbols whose every occurrence in the training text was merged into larger ones. The second case is rarer. A symbol can stay in the merge list but vanish from the segmented training text. Our toy shows the same thing. After five merges the segmented corpus is <code>hug</code> ×10, <code>pug</code> ×5, <code>pun</code> ×12, <code>b un</code> ×4, <code>hug s</code> ×5. The symbol <code>ug</code> is still in the merge list (it was merge 1), so it counts towards the vocabulary size. But in the segmented text it never stands alone: every <code>ug</code> now sits inside <code>hug</code> or <code>pug</code>. A network trained on this text gets no training examples for <code>ug</code> by itself. Yet a new word like <code>bug</code> is split by replaying the merges into <code>b</code> + <code>ug</code>, which hands the network a symbol it has never seen on its own. In practice the paper left such infrequent subword units out of the network’s vocabulary, so such a symbol is simply unknown to the model. The paper’s own example is <code>safeguar</code>, which only ever occurred inside <code>safeguard</code>. The authors saw no such cases at test time, and note they could be fixed by undoing specific merges.</p>
+<p>Unicode contains well over a hundred thousand characters, so a base vocabulary of “every character” is large and still incomplete. <strong>Byte-level BPE</strong> fixes this by starting from bytes instead of characters. Every string, in any script, is a sequence of UTF-8 bytes, so a base vocabulary of just 256 entries can encode anything and unknown tokens become impossible. GPT-2 popularised this: its vocabulary of 50,257 entries is 256 byte tokens, 50,000 learned merges and one special end-of-text token.</p>
+<p>The cost is that non-Latin text starts out longer. In UTF-8, <code>é</code> takes 2 bytes, an emoji 4 bytes, and the Hindi word <code>नमस्ते</code> (6 characters) takes 18 bytes. Until merges cover those byte patterns, such text costs many more tokens than English. We come back to this below.</p>
+<p>A related fix is <em>byte fallback</em> in SentencePiece-style tokenizers: keep a normal character vocabulary, and decompose rare characters into byte tokens only when needed.</p>
+</section>
+<section id="the-cousins-wordpiece-and-unigram" class="level2">
+<h2 class="anchored" data-anchor-id="the-cousins-wordpiece-and-unigram">4. The cousins: WordPiece and Unigram</h2>
+<p>BPE is not the only way to choose a subword vocabulary. Two others are also worth knowing atleast at the intuition level.</p>
+<p><strong>WordPiece</strong> (Schuster &amp; Nakajima, 2012; used by BERT, Devlin et al., 2019) also grows its vocabulary bottom-up, but chooses merges by their effect on the likelihood of the training data, not by raw count. The original criterion is the total likelihood gain. The version taught in most tutorials is a simplification that ranks pairs by the gain per occurrence (see the <a href="../../posts/tokenization-bpe/wordpiece-likelihood-proof.html">complete mathematical derivation here</a>).</p>
+<p>In practice, that reduces to ranking candidate pairs <span class="math inline">\((a, b)\)</span> by</p>
+<p><span class="math display">\[\text{score}(a,b) = \frac{\text{count}(ab)}{\text{count}(a)\,\cdot\,\text{count}(b)}\]</span></p>
+<p>where <span class="math inline">\(\text{count}(ab)\)</span> is how often <span class="math inline">\(a\)</span> and <span class="math inline">\(b\)</span> occur side by side as a pair, and <span class="math inline">\(\text{count}(a)\)</span>, <span class="math inline">\(\text{count}(b)\)</span> are how often each piece occurs anywhere in the corpus.</p>
+<p><em>Why the denominator matters.</em> Notice that we can rewrite the score as <span class="math inline">\(\frac{\text{count}(ab)}{\text{count}(a)} \cdot \frac{1}{\text{count}(b)}\)</span>, where <span class="math inline">\(\frac{\text{count}(ab)}{\text{count}(a)}\)</span> is basically <span class="math inline">\(P(b \text{ follows } a \mid a \text{ just appeared})\)</span>. Let’s consider a pair of very common letters like <code>e</code> and <code>s</code> and let’s say, <span class="math inline">\(\text{count}(es) = 1{,}000\)</span>, <span class="math inline">\(\text{count}(e) = 20{,}000\)</span> and <span class="math inline">\(\text{count}(s) = 15{,}000\)</span>. That means only <span class="math inline">\(5\%\)</span> of <code>e</code>’s are actually followed by <code>s</code>, and the huge denominator (<span class="math inline">\(20{,}000 \times 15{,}000\)</span>) pushes the score down to <span class="math inline">\(3.3 \times 10^{-6}\)</span>. Conversely, <code>q</code> and <code>u</code> might only appear together <span class="math inline">\(150\)</span> times, but almost every <code>q</code> is followed by <code>u</code> (<span class="math inline">\(\text{count}(q) = 150\)</span>, <span class="math inline">\(\text{count}(u) = 3{,}000\)</span>), giving a score of <span class="math inline">\(3.3 \times 10^{-4}\)</span>, which is a hundred times higher despite being seven times rarer. While BPE merges the most <em>frequent</em> neighbours first, WordPiece merges the most <em>mutually predictive</em> (“sticky”) neighbours first.</p>
+<p>At encoding time, rather than replaying a merge list, WordPiece splits each word greedily by matching the longest known vocabulary entry from left to right.</p>
+<p><strong>Unigram LM</strong> (Kudo, 2018) works top-down. Start with a very large candidate vocabulary and prune. It assumes each subword occurs independently, so a segmentation <span class="math inline">\(\mathbf{x} = (x_1, \dots, x_M)\)</span> of a sentence has probability</p>
+<p><span class="math display">\[P(\mathbf{x}) = \prod_{i=1}^{M} p(x_i)\]</span></p>
+<p>where <span class="math inline">\(M\)</span> is the number of pieces and <span class="math inline">\(p(x_i)\)</span> is the probability of piece <span class="math inline">\(x_i\)</span>. The best segmentation is the one with the highest <span class="math inline">\(P(\mathbf{x})\)</span>. Training repeatedly estimates the probabilities <span class="math inline">\(p(\cdot)\)</span>, measures how much the total likelihood would drop if each piece were removed, and discards the least useful ones. A side effect is that Unigram can output several plausible segmentations with probabilities, which Kudo used as a regulariser during training.</p>
+<p><strong>SentencePiece</strong> (Kudo &amp; Richardson, 2018) is a <em>library</em>, not an algorithm: it can train either BPE or Unigram models, and it treats whitespace as an ordinary symbol so it needs no language-specific pre-splitting.</p>
+<p>Rough map of who uses what (as publicly documented):</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Family</th>
+<th>Examples</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Byte-level BPE</td>
+<td>GPT-2; the OpenAI <code>tiktoken</code> encodings; Llama 3 (128K vocabulary: 100K tokens from <code>tiktoken</code> plus 28K added for non-English languages)</td>
+</tr>
+<tr class="even">
+<td>SentencePiece BPE</td>
+<td>Llama 2 (32K vocabulary)</td>
+</tr>
+<tr class="odd">
+<td>WordPiece</td>
+<td>BERT and its relatives</td>
+</tr>
+<tr class="even">
+<td>SentencePiece Unigram</td>
+<td>T5, XLNet</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="practical-consequences" class="level2">
+<h2 class="anchored" data-anchor-id="practical-consequences">5. Practical consequences</h2>
+<p><strong>Vocabulary size is a trade-off, not a constant.</strong> A larger vocabulary shortens sequences (cheaper, more text fits in context because it possesses specific tokens for many whole words) but makes the embedding table and output layer bigger and gives rare tokens fewer training examples. Real systems range from about 30K (BERT) to 128K (Llama 3) and beyond. Sennrich et al.&nbsp;themselves describe their choice of vocabulary size as “somewhat arbitrary”.</p>
+<p><strong>Fertility.</strong> The <em>fertility</em> of a tokenizer on a text is the average number of tokens per word:</p>
+<p><span class="math display">\[f = \frac{\text{number of tokens}}{\text{number of words}}\]</span></p>
+<p>The minimum is <span class="math inline">\(f = 1\)</span>, meaning every word is a single token. Higher is worse: more tokens means a higher bill, less room in the context window and more latency. Rust et al.&nbsp;(2021) show fertility rising sharply for languages that are poorly covered by a tokenizer’s vocabulary. The Llama 3 report quotes an average compression gain on English from 3.17 to 3.94 characters per token versus Llama 2, which is the same idea measured the other way around.</p>
+<p><strong>Numbers.</strong> A plain BPE vocabulary can split numbers inconsistently (“2024” might be one token while “2025” is two), which hurts arithmetic because digits no longer line up by place value. Tokenizers address this differently. Per a Hugging Face write-up on the topic, Llama 1/2 split every number into single digits, while Llama 3 groups digits in chunks of up to three. There is no single right answer; the point is that the <em>choice</em> is made in the tokenizer, before the model ever trains.</p>
+<p><strong>Code.</strong> Indentation and repeated whitespace can burn many tokens unless the vocabulary contains merged whitespace pieces. Code-heavy training data usually leads to those being learned.</p>
+</section>
+<section id="special-tokens-and-chat-templates" class="level2">
+<h2 class="anchored" data-anchor-id="special-tokens-and-chat-templates">6. Special tokens and chat templates</h2>
+<p>Some vocabulary entries are not learned from text. <strong>Special tokens</strong> are reserved symbols that carry <em>structure</em>, not language. They must stay atomic: the tokenizer must never split them into characters.</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Token (typical role)</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Beginning-of-sequence (BOS)</td>
+<td>Marks where a sequence starts</td>
+</tr>
+<tr class="even">
+<td>End-of-sequence (EOS)</td>
+<td>The model emits it to say “I’m done”; generation stops when it appears</td>
+</tr>
+<tr class="odd">
+<td>Padding (PAD)</td>
+<td>Fills shorter sequences in a batch to equal length; masked out of attention</td>
+</tr>
+<tr class="even">
+<td>Role markers</td>
+<td>Mark who is speaking (system, user, assistant) in chat models</td>
+</tr>
+</tbody>
+</table>
+<p>Not every tokenizer has all of them. GPT-2, for instance, has exactly one special token, end-of-text.</p>
+<p>Chat models are trained on conversations flattened into one token stream with role markers. A purely illustrative example (real markers differ between model families):</p>
+<pre class="text"><code>&lt;|system|&gt; You are a helpful assistant. &lt;|end|&gt;
+&lt;|user|&gt; Explain BPE in one sentence. &lt;|end|&gt;
+&lt;|assistant|&gt;</code></pre>
+<p>The model then continues from <code>&lt;|assistant|&gt;</code> until it emits its end-of-turn token. Because every family uses different markers, never hand-build these strings. Use the tokenizer’s own chat template (shown below). It is also why EOS matters so much: a model that cannot emit its stop token keeps generating until a length limit cuts it off.</p>
+</section>
+<section id="code" class="level2">
+<h2 class="anchored" data-anchor-id="code">7. Code</h2>
+<section id="bpe-from-scratch" class="level3">
+<h3 class="anchored" data-anchor-id="bpe-from-scratch">BPE from scratch</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> collections <span class="im">import</span> Counter</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> get_pair_counts(corpus):</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""corpus: {tuple_of_symbols: count} -&gt; Counter of adjacent pairs."""</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    pairs <span class="op">=</span> Counter()</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> symbols, freq <span class="kw">in</span> corpus.items():</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> a, b <span class="kw">in</span> <span class="bu">zip</span>(symbols, symbols[<span class="dv">1</span>:]):</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>            pairs[(a, b)] <span class="op">+=</span> freq</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> pairs</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> apply_merge(corpus, pair):</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Replace every adjacent occurrence of `pair` with the merged symbol."""</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    merged <span class="op">=</span> pair[<span class="dv">0</span>] <span class="op">+</span> pair[<span class="dv">1</span>]</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    new_corpus <span class="op">=</span> {}</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> symbols, freq <span class="kw">in</span> corpus.items():</span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>        out, i <span class="op">=</span> [], <span class="dv">0</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">while</span> i <span class="op">&lt;</span> <span class="bu">len</span>(symbols):</span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> i <span class="op">&lt;</span> <span class="bu">len</span>(symbols) <span class="op">-</span> <span class="dv">1</span> <span class="kw">and</span> (symbols[i], symbols[i <span class="op">+</span> <span class="dv">1</span>]) <span class="op">==</span> pair:</span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>                out.append(merged)<span class="op">;</span> i <span class="op">+=</span> <span class="dv">2</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>            <span class="cf">else</span>:</span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>                out.append(symbols[i])<span class="op">;</span> i <span class="op">+=</span> <span class="dv">1</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>        key <span class="op">=</span> <span class="bu">tuple</span>(out)</span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>        new_corpus[key] <span class="op">=</span> new_corpus.get(key, <span class="dv">0</span>) <span class="op">+</span> freq</span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> new_corpus</span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> train_bpe(word_counts, num_merges):</span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>    corpus <span class="op">=</span> {<span class="bu">tuple</span>(w): c <span class="cf">for</span> w, c <span class="kw">in</span> word_counts.items()}</span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>    base_vocab <span class="op">=</span> <span class="bu">sorted</span>({ch <span class="cf">for</span> w <span class="kw">in</span> word_counts <span class="cf">for</span> ch <span class="kw">in</span> w})</span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>    merges <span class="op">=</span> []</span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(num_merges):</span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>        pairs <span class="op">=</span> get_pair_counts(corpus)</span>
+<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="kw">not</span> pairs:</span>
+<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a>            <span class="cf">break</span></span>
+<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a>        best, count <span class="op">=</span> pairs.most_common(<span class="dv">1</span>)[<span class="dv">0</span>]   <span class="co"># ties: first pair seen wins</span></span>
+<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a>        corpus <span class="op">=</span> apply_merge(corpus, best)</span>
+<span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a>        merges.append((best, count))</span>
+<span id="cb2-37"><a href="#cb2-37" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> base_vocab, merges</span>
+<span id="cb2-38"><a href="#cb2-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-39"><a href="#cb2-39" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> encode(word, merges, base_vocab):</span>
+<span id="cb2-40"><a href="#cb2-40" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Split into characters, then replay the merges in learned order."""</span></span>
+<span id="cb2-41"><a href="#cb2-41" aria-hidden="true" tabindex="-1"></a>    symbols <span class="op">=</span> <span class="bu">tuple</span>(word)</span>
+<span id="cb2-42"><a href="#cb2-42" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> pair, _ <span class="kw">in</span> merges:</span>
+<span id="cb2-43"><a href="#cb2-43" aria-hidden="true" tabindex="-1"></a>        symbols <span class="op">=</span> <span class="bu">next</span>(<span class="bu">iter</span>(apply_merge({symbols: <span class="dv">1</span>}, pair)))</span>
+<span id="cb2-44"><a href="#cb2-44" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> [s <span class="cf">if</span> (<span class="bu">len</span>(s) <span class="op">&gt;</span> <span class="dv">1</span> <span class="kw">or</span> s <span class="kw">in</span> base_vocab) <span class="cf">else</span> <span class="st">"&lt;unk&gt;"</span> <span class="cf">for</span> s <span class="kw">in</span> symbols]</span>
+<span id="cb2-45"><a href="#cb2-45" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-46"><a href="#cb2-46" aria-hidden="true" tabindex="-1"></a>counts <span class="op">=</span> {<span class="st">"hug"</span>: <span class="dv">10</span>, <span class="st">"pug"</span>: <span class="dv">5</span>, <span class="st">"pun"</span>: <span class="dv">12</span>, <span class="st">"bun"</span>: <span class="dv">4</span>, <span class="st">"hugs"</span>: <span class="dv">5</span>}</span>
+<span id="cb2-47"><a href="#cb2-47" aria-hidden="true" tabindex="-1"></a>base, merges <span class="op">=</span> train_bpe(counts, <span class="dv">3</span>)</span>
+<span id="cb2-48"><a href="#cb2-48" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> pair, c <span class="kw">in</span> merges:</span>
+<span id="cb2-49"><a href="#cb2-49" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(pair, c)</span>
+<span id="cb2-50"><a href="#cb2-50" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(encode(<span class="st">"bugs"</span>, merges, base))   <span class="co"># ['b', 'ug', 's']</span></span>
+<span id="cb2-51"><a href="#cb2-51" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(encode(<span class="st">"mug"</span>, merges, base))    <span class="co"># ['&lt;unk&gt;', 'ug']</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Output:</p>
+<pre class="text"><code>('u', 'g') 20
+('u', 'n') 16
+('h', 'ug') 15
+['b', 'ug', 's']
+['&lt;unk&gt;', 'ug']</code></pre>
+<p>Real implementations add the pieces we skipped: an end-of-word or leading-space convention, byte-level base symbols, and incremental pair-count updates instead of recounting the corpus on every merge.</p>
+</section>
+<section id="a-real-tokenizer-with-hugging-face-transformers" class="level3">
+<h3 class="anchored" data-anchor-id="a-real-tokenizer-with-hugging-face-transformers">A real tokenizer with Hugging Face <code>transformers</code></h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> transformers <span class="im">import</span> AutoTokenizer</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>tok <span class="op">=</span> AutoTokenizer.from_pretrained(<span class="st">"gpt2"</span>)        <span class="co"># byte-level BPE, 50,257 entries</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>text <span class="op">=</span> <span class="st">"Tokenization is unbelievably useful."</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>ids <span class="op">=</span> tok.encode(text)</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(ids)                                          <span class="co"># integer IDs</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(tok.convert_ids_to_tokens(ids))               <span class="co"># the subword pieces</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> tok.decode(ids) <span class="op">==</span> text                      <span class="co"># lossless round trip</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="co"># Chat models ship their own template; use it instead of hand-built strings.</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>chat_tok <span class="op">=</span> AutoTokenizer.from_pretrained(<span class="st">"&lt;a-chat-model-name&gt;"</span>)</span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>messages <span class="op">=</span> [{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"Explain BPE in one sentence."</span>}]</span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>prompt <span class="op">=</span> chat_tok.apply_chat_template(</span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>    messages, tokenize<span class="op">=</span><span class="va">False</span>, add_generation_prompt<span class="op">=</span><span class="va">True</span></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(prompt)                                       <span class="co"># shows the model's real markers</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Run it with a few of your own sentences, including another language and some code, and compare token counts. Seeing the pieces is the fastest way to build intuition.</p>
+</section>
+</section>
+<section id="common-pitfalls" class="level2">
+<h2 class="anchored" data-anchor-id="common-pitfalls">8. Common pitfalls</h2>
+<ul>
+<li><strong>Tokens are not words.</strong> English averages a bit over one token per word, but the ratio varies a lot by language and domain. Estimate cost and context use in tokens, never in words.</li>
+<li><strong>The tokenizer belongs to the model.</strong> IDs only mean something to the vocabulary and embedding table they were trained with. Swapping tokenizers without retraining breaks the model silently.</li>
+<li><strong>Whitespace is part of the token.</strong> In many tokenizers <code>hello</code> and <code>hello</code> (with a leading space) are different tokens. A stray trailing space in a prompt can change what the model sees.</li>
+<li><strong>Unknown characters.</strong> A character-level base vocabulary can emit <code>&lt;unk&gt;</code> and lose information. Byte-level BPE avoids this, at the cost of longer sequences for scripts that UTF-8 encodes in several bytes.</li>
+<li><strong>Inconsistent number splitting.</strong> Do not assume digits are tokenized the same way across models or even across similar numbers. Check before trusting a model on arithmetic or on parsing numeric IDs.</li>
+<li><strong>Reading a high fertility as “the model is bad at this language”.</strong> It is a symptom of tokenizer coverage, and it directly raises cost and shrinks effective context. Measure it on your own text.</li>
+<li><strong>Hand-writing chat templates.</strong> A single wrong role marker or missing end-of-turn token can degrade output with no error. Use the template that ships with the tokenizer.</li>
+<li><strong>Letting user text become control tokens.</strong> If user-supplied text containing a special-token string is parsed as the real special token, it can corrupt the prompt structure. Treat user text as plain text.</li>
+<li><strong>Adding new special tokens and expecting them to work.</strong> Tokens added after pretraining get embeddings that are untrained until fine-tuning teaches the model what they mean.</li>
+<li><strong>Mismatched tokenization between training stages.</strong> Anything that compares two models’ token probabilities (as RL fine-tuning methods do) requires both to use identical tokenization and special-token handling.</li>
+</ul>
+</section>
+<section id="takeaways" class="level2">
+<h2 class="anchored" data-anchor-id="takeaways">Takeaways</h2>
+<ul>
+<li>Models read integers; the tokenizer is the translation layer and it is learned from data.</li>
+<li>Subwords give a middle path: short sequences and an open vocabulary.</li>
+<li>BPE learns an ordered list of merges. Learn by repeatedly merging the most frequent pair (recounting each time), encode by replaying the merges in order.</li>
+<li>Vocabulary size = base symbols + merges.</li>
+<li>Byte-level BPE guarantees no unknown tokens; special tokens add structure; and tokenizer choices, from vocabulary size to digit handling, directly affect cost and capability.</li>
+</ul>
+</section>
+<section id="references" class="level2">
+<h2 class="anchored" data-anchor-id="references">References</h2>
+<ol type="1">
+<li>R. Sennrich, B. Haddow, A. Birch. <em>Neural Machine Translation of Rare Words with Subword Units.</em> ACL 2016. arXiv:1508.07909.</li>
+<li>P. Gage. <em>A New Algorithm for Data Compression.</em> C Users Journal 12(2), 1994.</li>
+<li>A. Radford et al.&nbsp;<em>Language Models are Unsupervised Multitask Learners.</em> OpenAI, 2019 (GPT-2).</li>
+<li>M. Schuster, K. Nakajima. <em>Japanese and Korean Voice Search.</em> ICASSP 2012.</li>
+<li>J. Devlin et al.&nbsp;<em>BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding.</em> 2019. arXiv:1810.04805.</li>
+<li>T. Kudo. <em>Subword Regularization: Improving Neural Network Translation Models with Multiple Subword Candidates.</em> ACL 2018. arXiv:1804.10959.</li>
+<li>T. Kudo, J. Richardson. <em>SentencePiece: A simple and language independent subword tokenizer and detokenizer for Neural Text Processing.</em> EMNLP 2018 (System Demonstrations). arXiv:1808.06226.</li>
+<li>A. Grattafiori et al.&nbsp;<em>The Llama 3 Herd of Models.</em> 2024. arXiv:2407.21783.</li>
+<li>P. Rust et al.&nbsp;<em>How Good is Your Tokenizer? On the Monolingual Performance of Multilingual Language Models.</em> ACL-IJCNLP 2021. arXiv:2012.15613.</li>
+<li>A. Vaswani et al.&nbsp;<em>Attention Is All You Need.</em> 2017. arXiv:1706.03762.</li>
+<li>Hugging Face. <em>Number tokenization</em> write-up on digit handling in GPT-2, Llama and DeepSeek tokenizers. <a href="https://huggingface.co/spaces/huggingface/number-tokenization-blog" class="uri">https://huggingface.co/spaces/huggingface/number-tokenization-blog</a></li>
+<li>OpenAI. <code>tiktoken</code> (BPE tokenizer library and encodings). <a href="https://github.com/openai/tiktoken" class="uri">https://github.com/openai/tiktoken</a></li>
+</ol>
+<hr>
+<p>This work adapts material from “The Hitchhiker’s Guide to Agentic AI” by Haggai Roitman (arXiv:2606.24937v3, book version 1.4), licensed under CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/). Changes: adapted into standalone articles, with added explanations, diagrams and examples. This work is licensed under CC BY-SA 4.0.</p>
+
+
+</section>
+
+<div id="quarto-appendix" class="default"><section class="quarto-appendix-contents" id="quarto-reuse"><h2 class="anchored quarto-appendix-heading">Reuse</h2><div class="quarto-appendix-contents"><div><a rel="license" href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a></div></div></section></div></main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp("https:\/\/skartheekYT\.github\.io\/");
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+<footer class="footer">
+  <div class="nav-footer">
+    <div class="nav-footer-left">
+      &nbsp;
+    </div>   
+    <div class="nav-footer-center">
+<p>Content licensed under <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a></p>
+</div>
+    <div class="nav-footer-right">
+      &nbsp;
+    </div>
+  </div>
+</footer>
+
+
+
+
+</body></html>
