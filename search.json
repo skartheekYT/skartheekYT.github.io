@@ -1,0 +1,23 @@
+[
+  {
+    "objectID": "blog.html",
+    "href": "blog.html",
+    "title": "Articles",
+    "section": "",
+    "text": "No matching items"
+  },
+  {
+    "objectID": "about.html",
+    "href": "about.html",
+    "title": "About",
+    "section": "",
+    "text": "I hold a B.Tech in Mathematics and Computing from IIT Hyderabad, and I’m learning LLMs and agentic AI in public. This site collects my notes and articles, each paired with a YouTube video.\nThe series follows The Hitchhiker’s Guide to Agentic AI by Haggai Roitman (CC BY-SA 4.0). Articles are self-contained, intuition first, and each one lists what I changed from the book.\n\nLinkedIn: https://www.linkedin.com/in/kartheek-saradhi/\nYouTube: &lt;channel URL, once created&gt;"
+  },
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "Agentic AI Notes",
+    "section": "",
+    "text": "Notes on LLMs and agentic AI, written while working through The Hitchhiker’s Guide to Agentic AI by Haggai Roitman. Each article is self-contained, intuition first, with the math explained.\nSee the articles."
+  }
+]
