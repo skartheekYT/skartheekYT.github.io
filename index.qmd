@@ -1,0 +1,7 @@
+---
+title: "Agentic AI Notes"
+---
+
+Notes on LLMs and agentic AI, written while working through *The Hitchhiker's Guide to Agentic AI* by Haggai Roitman. Each article is self-contained, intuition first, with the math explained.
+
+See the [articles](blog.qmd).
