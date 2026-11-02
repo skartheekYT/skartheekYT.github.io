@@ -1,0 +1,116 @@
+---
+title: "Companion: Deriving the Whitening Matrix"
+description: "Step-by-step derivation of W = U Λ^(-1/2), the Whitening-k truncation, and exact streaming updates for the mean and covariance."
+date: "2026-11-01"
+draft: false
+categories: [llm, embeddings, math]
+---
+
+This page is a companion to [Anisotropy and Whitening](index.qmd). It derives the whitening matrix and a few facts the main article uses. It assumes basic linear algebra (matrix product, transpose, eigendecomposition).
+
+## Setup
+
+We have $N$ embeddings, stored as row vectors $\mathbf{x}_i \in \mathbb{R}^{1\times d}$. Define
+
+$$
+\boldsymbol{\mu} = \frac{1}{N}\sum_{i=1}^{N}\mathbf{x}_i, \qquad
+\boldsymbol{\Sigma} = \frac{1}{N}\sum_{i=1}^{N}(\mathbf{x}_i-\boldsymbol{\mu})^\top(\mathbf{x}_i-\boldsymbol{\mu}) \in \mathbb{R}^{d\times d}.
+$$
+
+Each term $(\mathbf{x}_i-\boldsymbol{\mu})^\top(\mathbf{x}_i-\boldsymbol{\mu})$ is a $d\times d$ outer product (a column times a row). $\boldsymbol{\Sigma}$ is symmetric and positive semi-definite; we assume it is positive definite (all eigenvalues $>0$, which needs enough data and no perfectly redundant coordinates).
+
+We look for a $d\times d$ matrix $\mathbf{W}$ such that
+
+$$
+\tilde{\mathbf{x}}_i = (\mathbf{x}_i-\boldsymbol{\mu})\,\mathbf{W}
+$$
+
+has mean $\mathbf{0}$ and covariance $\mathbf{I}$.
+
+## Step 1: mean and covariance of the transformed data
+
+**Mean.** $\frac1N\sum_i \tilde{\mathbf{x}}_i = \left(\frac1N\sum_i \mathbf{x}_i - \boldsymbol{\mu}\right)\mathbf{W} = \mathbf{0}$. Subtracting $\boldsymbol{\mu}$ already makes it zero for any $\mathbf{W}$.
+
+**Covariance.** Since the mean is zero,
+
+$$
+\tilde{\boldsymbol{\Sigma}}
+= \frac1N\sum_i \tilde{\mathbf{x}}_i^\top\tilde{\mathbf{x}}_i
+= \frac1N\sum_i \mathbf{W}^\top(\mathbf{x}_i-\boldsymbol{\mu})^\top(\mathbf{x}_i-\boldsymbol{\mu})\mathbf{W}
+= \mathbf{W}^\top\boldsymbol{\Sigma}\,\mathbf{W}.
+$$
+
+So the requirement is the single matrix equation
+
+$$
+\mathbf{W}^\top\boldsymbol{\Sigma}\,\mathbf{W} = \mathbf{I}. \tag{1}
+$$
+
+## Step 2: diagonalise $\boldsymbol{\Sigma}$
+
+A symmetric positive definite matrix has an eigendecomposition (the spectral theorem; for such matrices it coincides with the SVD):
+
+$$
+\boldsymbol{\Sigma} = \mathbf{U}\boldsymbol{\Lambda}\mathbf{U}^\top,
+$$
+
+where $\mathbf{U}$ is orthogonal ($\mathbf{U}^\top\mathbf{U}=\mathbf{I}$) and $\boldsymbol{\Lambda}=\text{diag}(\lambda_1,\dots,\lambda_d)$ with $\lambda_1\ge\dots\ge\lambda_d>0$.
+
+## Step 3: solve for $\mathbf{W}$
+
+Try $\mathbf{W} = \mathbf{U}\boldsymbol{\Lambda}^{-1/2}$, where $\boldsymbol{\Lambda}^{-1/2}=\text{diag}(\lambda_1^{-1/2},\dots,\lambda_d^{-1/2})$. Then
+
+$$
+\mathbf{W}^\top\boldsymbol{\Sigma}\mathbf{W}
+= \boldsymbol{\Lambda}^{-1/2}\mathbf{U}^\top(\mathbf{U}\boldsymbol{\Lambda}\mathbf{U}^\top)\mathbf{U}\boldsymbol{\Lambda}^{-1/2}
+= \boldsymbol{\Lambda}^{-1/2}\boldsymbol{\Lambda}\boldsymbol{\Lambda}^{-1/2}
+= \mathbf{I}.
+$$
+
+It uses $\boldsymbol{\Lambda}^{-1/2}$ being diagonal (so equal to its own transpose) and $\mathbf{U}^\top\mathbf{U}=\mathbf{I}$. This matches the solution in Su et al. (2021), who reach it by writing $\boldsymbol{\Sigma}=(\mathbf{W}^{-1})^\top\mathbf{W}^{-1}$ and choosing $\mathbf{W}^{-1}=\boldsymbol{\Lambda}^{1/2}\mathbf{U}^\top$.
+
+In column-vector notation, a vector $\mathbf{h}$ is whitened as $\tilde{\mathbf{h}}=\boldsymbol{\Lambda}^{-1/2}\mathbf{U}^\top(\mathbf{h}-\boldsymbol{\mu})$, which is the transpose of $(\mathbf{x}-\boldsymbol{\mu})\mathbf{W}$.
+
+## The solution is not unique
+
+If $\mathbf{R}$ is any orthogonal matrix, then $\mathbf{W}'=\mathbf{W}\mathbf{R}$ also satisfies equation (1), since $\mathbf{R}^\top\mathbf{I}\mathbf{R}=\mathbf{I}$. Different choices of $\mathbf{R}$ give different "whitenings" with the same covariance. Choosing $\mathbf{R}=\mathbf{I}$ gives $\mathbf{W}=\mathbf{U}\boldsymbol{\Lambda}^{-1/2}$ (often called PCA whitening); choosing $\mathbf{R}=\mathbf{U}^\top$ gives $\mathbf{U}\boldsymbol{\Lambda}^{-1/2}\mathbf{U}^\top$ (ZCA whitening), which stays as close as possible to the original coordinates. Because a rotation does not change any cosine similarity *between whitened vectors*, both choices give the same pairwise cosines.
+
+## Step 4: dropping directions (Whitening-$k$)
+
+Let $\mathbf{W}_k=\mathbf{W}[:,:k]$ be the first $k$ columns, i.e. $\mathbf{U}_k\boldsymbol{\Lambda}_k^{-1/2}$. The transformed vectors $\tilde{\mathbf{x}}^{(k)}_i=(\mathbf{x}_i-\boldsymbol{\mu})\mathbf{W}_k\in\mathbb{R}^{1\times k}$ have covariance
+
+$$
+\mathbf{W}_k^\top\boldsymbol{\Sigma}\mathbf{W}_k = \boldsymbol{\Lambda}_k^{-1/2}\mathbf{U}_k^\top\mathbf{U}\boldsymbol{\Lambda}\mathbf{U}^\top\mathbf{U}_k\boldsymbol{\Lambda}_k^{-1/2} = \mathbf{I}_k,
+$$
+
+because $\mathbf{U}_k^\top\mathbf{U}=[\,\mathbf{I}_k\;\;\mathbf{0}\,]$. So the retained coordinates are still uncorrelated with unit variance. The discarded directions are the ones with the smallest variances $\lambda_{k+1},\dots,\lambda_d$. Projecting onto the top-$k$ eigenvectors is exactly PCA, and Whitening-$k$ is PCA plus rescaling each kept axis by $1/\sqrt{\lambda_j}$.
+
+## Streaming the mean and covariance
+
+For large corpora we want $\boldsymbol{\mu}$ and $\boldsymbol{\Sigma}$ without holding all vectors in memory. Let $\boldsymbol{\mu}_n,\boldsymbol{\Sigma}_n$ be the statistics of the first $n$ vectors (covariance taken about the running mean, as above). Adding $\mathbf{x}_{n+1}$:
+
+$$
+\boldsymbol{\mu}_{n+1} = \frac{n}{n+1}\boldsymbol{\mu}_n + \frac{1}{n+1}\mathbf{x}_{n+1}.
+$$
+
+For the covariance, write $\mathbf{S}_n = n\boldsymbol{\Sigma}_n$. The standard (Welford-style) update is
+
+$$
+\mathbf{S}_{n+1} = \mathbf{S}_n + (\mathbf{x}_{n+1}-\boldsymbol{\mu}_n)^\top(\mathbf{x}_{n+1}-\boldsymbol{\mu}_{n+1}),
+$$
+
+and since $\mathbf{x}_{n+1}-\boldsymbol{\mu}_{n+1}=\frac{n}{n+1}(\mathbf{x}_{n+1}-\boldsymbol{\mu}_n)$, dividing by $n+1$ gives the exact recursion
+
+$$
+\boldsymbol{\Sigma}_{n+1} = \frac{n}{n+1}\boldsymbol{\Sigma}_n + \frac{n}{(n+1)^2}(\mathbf{x}_{n+1}-\boldsymbol{\mu}_n)^\top(\mathbf{x}_{n+1}-\boldsymbol{\mu}_n).
+$$
+
+We checked this numerically against the batch covariance (agreement to about $10^{-15}$). Memory is $O(d^2)$ regardless of $N$, and time is $O(d^2)$ per vector.
+
+## Why this matters for cosine
+
+After whitening, $\boldsymbol{\mu}$ no longer contributes a shared offset to dot products, and each (kept) direction contributes equally to $\mathbf{x}\cdot\mathbf{y}$. That is the "isotropic, so the coordinate formula for cosine is trustworthy" argument of the main article, and also the reason full whitening can hurt: directions with tiny variance, often mostly noise, are given the same weight as the informative ones.
+
+---
+
+This work adapts material from "The Hitchhiker's Guide to Agentic AI" by Haggai Roitman (arXiv:2606.24937v3, book version 1.4), licensed under CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/). Changes: adapted into standalone articles, with added explanations, diagrams and examples. This work is licensed under CC BY-SA 4.0.

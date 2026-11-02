@@ -1,0 +1,179 @@
+---
+title: "From Token IDs to Vectors: How LLMs Embed Text"
+description: "What the embedding layer actually is, where its vectors come from, how weight tying works, and why the geometry of embeddings matters."
+date: "2026-11-01"
+draft: false
+categories: [llm, embeddings, transformers]
+---
+
+A transformer cannot read text, and it cannot do much with integers either. Before any attention happens, every token ID has to become a vector of real numbers. This article covers that first step: what the **embedding layer** is, where its numbers come from, and why the *shape* of the resulting vector space matters for things like retrieval.
+
+This is the follow-up to the [tokenization article](../tokenization-bpe/index.qmd), which ended at the point where text has become a sequence of integer token IDs.
+
+## Why IDs are not enough
+
+After tokenization, a sentence is a list of integers, for example `[791, 4062, 14198]`. Those integers are just labels. ID 4062 is not "more" of anything than ID 4061, so feeding them directly to a network would make it learn arithmetic on arbitrary labels.
+
+The classic fix is **one-hot encoding**: for a vocabulary of size $|V|$, token $i$ becomes a vector of length $|V|$ with a 1 at position $i$ and 0 everywhere else. That removes the fake ordering, but it has two problems:
+
+- It is huge and almost entirely zeros (for $|V| = 128{,}000$, one token is a 128,000-dimensional vector).
+- Every pair of distinct tokens is exactly equally far apart. "king" is no closer to "queen" than to "bicycle", so the encoding carries no notion of similarity.
+
+An **embedding** replaces this with a short, dense, *learned* vector, typically a few thousand numbers, where similarity can be expressed by geometry.
+
+## The embedding table
+
+The embedding layer is one matrix:
+
+$$
+\mathbf{E} \in \mathbb{R}^{|V| \times d}
+$$
+
+- $|V|$ is the vocabulary size (number of distinct tokens).
+- $d$ is the embedding (model) dimension.
+- Row $i$ of $\mathbf{E}$ is the vector for token $i$.
+
+Embedding a token is just reading its row:
+
+$$
+\text{embed}(x_t) = \mathbf{E}[x_t] \in \mathbb{R}^{d}
+$$
+
+Here $x_t$ is the token ID at position $t$. For a sequence of $n$ tokens $[x_1, \dots, x_n]$, stacking the rows gives the input to the first transformer layer:
+
+$$
+\mathbf{H}_0 = \begin{bmatrix} \mathbf{E}[x_1] \\ \vdots \\ \mathbf{E}[x_n] \end{bmatrix} \in \mathbb{R}^{n \times d}
+$$
+
+Two things worth being clear about:
+
+1. **$\mathbf{E}$ is a set of learned parameters**, like any weight matrix. Unlike the tokenizer (which is fixed before training begins), the embedding table starts as random noise. The model stores one $d$-dimensional vector per token, and backpropagation adjusts those vectors alongside the rest of the network's weights.
+2. **A lookup is mathematically a one-hot matrix product, which is why it is differentiable.** If $\mathbf{o}_i \in \{0, 1\}^{|V|}$ is the one-hot vector for token $i$, then $\mathbf{o}_i^\top \mathbf{E} = \mathbf{E}[i]$. In practice, frameworks skip the wasteful multiplication by zeros and index the row directly in $O(1)$ time. Because it is equivalent to a linear projection, gradients flow cleanly during the backward pass, and only the rows for tokens present in the current batch receive updates, while the rest of the vocabulary receives a gradient of zero.
+
+```{mermaid}
+flowchart LR
+    A["Text<br/>'The cat sat'"] --> B["Tokenizer"]
+    B --> C["Token IDs<br/>[x1, x2, x3]"]
+    C --> D["Embedding table, E<br/>(|V| x d)<br/>row lookups"]
+    D --> E["Embeddings, H0<br/>(n x d)"]
+    E --> F["Transformer<br/>layers"]
+```
+
+### How big is it?
+
+The table has $|V| \times d$ numbers. For a configuration like Llama-3-8B ($|V| = 128{,}256$, $d = 4{,}096$):
+
+$$
+128{,}256 \times 4{,}096 \approx 525\text{M parameters},
+$$
+
+roughly 6.5% of an ~8B-parameter model. The embedding table is a non-trivial slice of the model, and it grows linearly with the vocabulary, which is one reason vocabulary size is a design decision (see the tokenization article).
+
+## Where do the vectors come from?
+
+The table starts out random (for example normal or Xavier-style initialisation) and is trained by backpropagation together with the rest of the model. Nobody tells it that "king" and "queen" should be related. So why do related tokens end up close together?
+
+The model is trained to predict the next token. Consider the contexts "The ___ barked at the mailman" and "I took my ___ for a walk". Tokens that can fill the same slots (dog, puppy, hound) must make the downstream layers produce similar predictions, and the model eventually learns to give them similar vectors. This is the **distributional hypothesis**, usually quoted as "you shall know a word by the company it keeps" (Firth, 1957): similar contexts imply similar meaning, so the embedding table compresses that statistical structure into geometry.
+
+Two training details:
+
+- **Sparse updates on the input side.** During a training step, only the rows of tokens that actually appeared in the batch receive gradient through the lookup. A token that is rarely seen gets few updates, so its row stays closer to its random starting point.
+- **Weight tying.** At the output, the model must turn a final hidden vector back into a score for every token in the vocabulary. That needs a $d \times |V|$ matrix. **Weight tying** reuses the embedding matrix for this:
+
+$$
+\mathbf{W}_{\text{head}} = \mathbf{E}^\top
+$$
+
+So the logits (the raw scores before softmax) for a final hidden vector $\mathbf{h}$ are $\mathbf{h}\,\mathbf{E}^\top$: the model scores each token by how well $\mathbf{h}$ lines up with that token's embedding. Tying saves $|V| \times d$ parameters and ties the "reading" and "writing" vocabularies together. Not every model does it (GPT-2 does; plenty of large models keep separate input and output matrices).
+
+One consequence: with tying, *every* row of $\mathbf{E}$ gets gradient from the output softmax, so the sparse-update picture above only describes the input lookup.
+
+## Measuring closeness: cosine similarity
+
+To say two vectors are "close" we usually compare their directions with **cosine similarity**:
+
+$$
+\cos(\mathbf{x}, \mathbf{y}) = \frac{\mathbf{x}\cdot\mathbf{y}}{\lVert\mathbf{x}\rVert\,\lVert\mathbf{y}\rVert}
+$$
+
+It is 1 when the vectors point the same way, 0 when they are orthogonal, and $-1$ when opposite. Here $\mathbf{x}\cdot\mathbf{y}$ is the dot product and $\lVert\cdot\rVert$ the vector length.
+
+Early static word vectors (word2vec-style) were shown to capture relationships as directions, the famous $\vec{\text{king}} - \vec{\text{man}} + \vec{\text{woman}} \approx \vec{\text{queen}}$ (Mikolov et al., 2013). That is a property reported for those models and it is approximate; do not assume an LLM's raw embedding table reliably does it.
+
+## One vector per token is only the starting point
+
+The table gives each token **one fixed vector**, whatever the sentence. As the vectors pass through the layers they are mixed with context, so the vector for "bank" in "river bank" ends up different from "bank" in "bank loan". These are the *contextualized representations*.
+
+How much does context change them? Ethayarajh (2019) measured this for ELMo, BERT and GPT-2. After adjusting for a geometric effect (we discuss next), on average **less than 5%** of the variance in a word's contextualized vectors can be explained by a single static vector for that word. So the layers do real work beyond the lookup table.
+
+## A geometry problem: anisotropy
+
+Here is the catch for anyone who wants to use these vectors for similarity search, clustering or recommendation. If vectors were spread evenly over all directions (**isotropic**), two totally unrelated vectors would have cosine similarity about 0. Ethayarajh found that in practice, contextualized representations are **anisotropic**: they sit in a **narrow cone**, so random pairs already have a high cosine similarity. The anisotropy in GPT-2's final layer is so extreme that any two random words have an almost perfect cosine similarity on average.
+
+```{mermaid}
+flowchart LR
+    A["<b>Anisotropic</b><hr/><small>• vectors in a narrow cone<br/>• random pair: cos ≈ 1</small>"] -- "whitening" --> B["<b>Isotropic</b><hr/><small>• directions spread evenly<br/>• random pair: cos ≈ 0</small>"]
+```
+
+A common post-processing fix is **whitening**: shift the vectors so their mean is zero, then rotate and rescale so every direction has the same spread. In the notation of Su et al. (2021), with $\mathbf{x}$ an embedding, $\boldsymbol{\mu}$ the mean embedding over a corpus, and $\mathbf{W}$ a matrix computed from the corpus covariance:
+
+$$
+\tilde{\mathbf{x}} = (\mathbf{x} - \boldsymbol{\mu})\,\mathbf{W}
+$$
+
+Keeping only the first $k$ columns of $\mathbf{W}$ also shrinks the vectors, which speeds up retrieval. In their experiments on sentence embeddings from BERT (whitening statistics fitted on the unlabeled evaluation sentences), this improved similarity scores on several benchmarks, for example STS-B Spearman correlation 59.04 → 71.34 for BERT-base, and a 768 → 256 dimension cut scored about the same (71.43). Gains are not uniform across datasets; the deep-dive article shows where it did not help.
+
+To dive deeper, see the next article, [Anisotropy and Whitening](../anisotropy-whitening/index.qmd). It covers how isotropy is measured, what Ethayarajh's experiments show, the derivation of $\mathbf{W}$, the dimensionality-reduction trade-off, and a runnable demo.
+
+## Code: lookup, one-hot equivalence, weight tying
+
+This is a small PyTorch sketch (our own) showing the three ideas above.
+
+```python
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+V, d = 1000, 16                      # tiny vocabulary and dimension
+emb = nn.Embedding(V, d)             # E: a learned (V x d) parameter matrix
+
+ids = torch.tensor([3, 17, 3])       # a "sentence" of token IDs
+H0 = emb(ids)                        # lookup -> shape (3, d)
+
+# Lookup == one-hot @ E
+one_hot = F.one_hot(ids, num_classes=V).float()   # (3, V)
+assert torch.allclose(H0, one_hot @ emb.weight, atol=1e-6)
+
+# Weight tying: the output head reuses E, so logits = h @ E^T
+head = nn.Linear(d, V, bias=False)
+head.weight = emb.weight             # same Parameter object: shared, not copied
+h_final = torch.randn(3, d)          # stand-in for the final hidden states
+logits = head(h_final)               # (3, V), equals h_final @ emb.weight.T
+
+print(sum(p.numel() for p in {id(p): p for p in
+          list(emb.parameters()) + list(head.parameters())}.values()))
+# prints V*d = 16000, not 2*V*d, because the matrix is shared
+
+cos = F.cosine_similarity(emb.weight[3], emb.weight[17], dim=0)
+print(float(cos))                    # random-init rows: near 0 until trained
+```
+
+## Common pitfalls
+
+- **Treating the table as "meaning".** It is one context-free vector per *token*, and tokens are often sub-words, not words. Contextual meaning lives in the later layers.
+- **Rare tokens.** Rows for tokens seen rarely get only few updates during training, so their vectors can be poorly trained.
+- **Weight tying and parameter counts.** Tying shares one matrix between input and output; check whether a model ties before comparing parameter counts.
+- **Trusting raw cosine similarity from a pretrained model.** High baseline similarity between unrelated items is a known effect (as seen above). Check the baseline on your own data, and consider post-processing or an embedding model trained for similarity.
+- **Fitting whitening on too little data.** The covariance must be estimated from a representative corpus; see the deep dive.
+
+## References
+
+- Ethayarajh, K. (2019). *How Contextual are Contextualized Word Representations? Comparing the Geometry of BERT, ELMo, and GPT-2 Embeddings.* EMNLP-IJCNLP 2019. arXiv:1909.00512.
+- Su, J., Cao, J., Liu, W., Ou, Y. (2021). *Whitening Sentence Representations for Better Semantics and Faster Retrieval.* arXiv:2103.15316.
+- Firth, J. R. (1957). *A synopsis of linguistic theory, 1930-1955.* Studies in Linguistic Analysis.
+- Mikolov, T., Yih, W., Zweig, G. (2013). *Linguistic regularities in continuous space word representations.* NAACL-HLT 2013.
+- Roitman, H. *The Hitchhiker's Guide to Agentic AI: From Foundations to Systems* (arXiv:2606.24937), §1.3.4.
+
+---
+
+This work adapts material from "The Hitchhiker's Guide to Agentic AI" by Haggai Roitman (arXiv:2606.24937v3, book version 1.4), licensed under CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/). Changes: adapted into standalone articles, with added explanations, diagrams and examples. This work is licensed under CC BY-SA 4.0.
