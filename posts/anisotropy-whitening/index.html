@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.20">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="dcterms.date" content="2026-11-01">
+<meta name="description" content="What anisotropy is, what the evidence says about BERT, ELMo and GPT-2, and how whitening (and Whitening-k) reshapes embeddings for similarity search.">
+
+<title>Anisotropy and Whitening: Fixing the Geometry of Embeddings – Agentic AI Notes</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../../">
+<script src="../../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../../site_libs/quarto-html/popper.min.js"></script>
+<script src="../../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../../site_libs/quarto-html/quarto-syntax-highlighting-17888a1159294d3eb470f19f6f52f5a5.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../../site_libs/bootstrap/bootstrap-17e92714493fce31463ccfbbc8488715.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+<script src="../../site_libs/quarto-diagram/mermaid.min.js"></script>
+<script src="../../site_libs/quarto-diagram/mermaid-init.js"></script>
+<link href="../../site_libs/quarto-diagram/mermaid.css" rel="stylesheet">
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../../styles.css">
+</head>
+
+<body class="nav-fixed quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a class="navbar-brand" href="../../index.html">
+    <span class="navbar-title">Agentic AI Notes</span>
+    </a>
+  </div>
+            <div id="quarto-search" class="" title="Search"></div>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+  <span class="navbar-toggler-icon"></span>
+</button>
+          <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav navbar-nav-scroll me-auto">
+  <li class="nav-item">
+    <a class="nav-link" href="../../index.html"> 
+<span class="menu-text">Home</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../blog.html"> 
+<span class="menu-text">Articles</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../about.html"> 
+<span class="menu-text">About</span></a>
+  </li>  
+</ul>
+          </div> <!-- /navcollapse -->
+            <div class="quarto-navbar-tools">
+</div>
+      </div> <!-- /container-fluid -->
+    </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">On this page</h2>
+   
+  <ul>
+  <li><a href="#what-cosine-similarity-quietly-assumes" id="toc-what-cosine-similarity-quietly-assumes" class="nav-link active" data-scroll-target="#what-cosine-similarity-quietly-assumes">What cosine similarity quietly assumes</a>
+  <ul class="collapse">
+  <li><a href="#why-non-orthonormal-axes-break-the-formula" id="toc-why-non-orthonormal-axes-break-the-formula" class="nav-link" data-scroll-target="#why-non-orthonormal-axes-break-the-formula">Why non-orthonormal axes break the formula</a></li>
+  </ul></li>
+  <li><a href="#isotropic-vs-anisotropic" id="toc-isotropic-vs-anisotropic" class="nav-link" data-scroll-target="#isotropic-vs-anisotropic">Isotropic vs anisotropic</a></li>
+  <li><a href="#what-the-evidence-says-ethayarajh-2019" id="toc-what-the-evidence-says-ethayarajh-2019" class="nav-link" data-scroll-target="#what-the-evidence-says-ethayarajh-2019">What the evidence says: Ethayarajh (2019)</a></li>
+  <li><a href="#why-a-cone-hurts-similarity-search" id="toc-why-a-cone-hurts-similarity-search" class="nav-link" data-scroll-target="#why-a-cone-hurts-similarity-search">Why a cone hurts similarity search</a></li>
+  <li><a href="#whitening" id="toc-whitening" class="nav-link" data-scroll-target="#whitening">Whitening</a>
+  <ul class="collapse">
+  <li><a href="#intuition-in-two-dimensions" id="toc-intuition-in-two-dimensions" class="nav-link" data-scroll-target="#intuition-in-two-dimensions">Intuition in two dimensions</a></li>
+  <li><a href="#the-formulas" id="toc-the-formulas" class="nav-link" data-scroll-target="#the-formulas">The formulas</a></li>
+  <li><a href="#whitening-k-shrinking-the-vectors" id="toc-whitening-k-shrinking-the-vectors" class="nav-link" data-scroll-target="#whitening-k-shrinking-the-vectors">Whitening-<span class="math inline">\(k\)</span>: shrinking the vectors</a></li>
+  <li><a href="#what-it-costs" id="toc-what-it-costs" class="nav-link" data-scroll-target="#what-it-costs">What it costs</a></li>
+  </ul></li>
+  <li><a href="#what-the-experiments-show-su-et-al.-2021" id="toc-what-the-experiments-show-su-et-al.-2021" class="nav-link" data-scroll-target="#what-the-experiments-show-su-et-al.-2021">What the experiments show (Su et al., 2021)</a></li>
+  <li><a href="#try-it-a-numpy-demo" id="toc-try-it-a-numpy-demo" class="nav-link" data-scroll-target="#try-it-a-numpy-demo">Try it: a NumPy demo</a></li>
+  <li><a href="#alternatives" id="toc-alternatives" class="nav-link" data-scroll-target="#alternatives">Alternatives</a></li>
+  <li><a href="#common-pitfalls" id="toc-common-pitfalls" class="nav-link" data-scroll-target="#common-pitfalls">Common pitfalls</a></li>
+  <li><a href="#references" id="toc-references" class="nav-link" data-scroll-target="#references">References</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Anisotropy and Whitening: Fixing the Geometry of Embeddings</h1>
+  <div class="quarto-categories">
+    <div class="quarto-category">llm</div>
+    <div class="quarto-category">embeddings</div>
+    <div class="quarto-category">retrieval</div>
+  </div>
+  </div>
+
+<div>
+  <div class="description">
+    What anisotropy is, what the evidence says about BERT, ELMo and GPT-2, and how whitening (and Whitening-k) reshapes embeddings for similarity search.
+  </div>
+</div>
+
+
+<div class="quarto-title-meta">
+
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">November 1, 2026</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>Embeddings are used through geometry: nearest neighbours, clusters, cosine scores. That only works if the geometry is well behaved. This article explains one specific way it often is not (<strong>anisotropy</strong>), what the research found about it in popular models, and a simple linear fix (<strong>whitening</strong>) with its dimensionality-reduction variant.</p>
+<p>It builds on <a href="../../posts/embeddings-token-vectors/index.html">From Token IDs to Vectors</a>, which introduced embeddings and cosine similarity. The algebra behind the whitening matrix is in a <a href="../../posts/anisotropy-whitening/derivation.html">companion derivation page</a>.</p>
+<section id="what-cosine-similarity-quietly-assumes" class="level2">
+<h2 class="anchored" data-anchor-id="what-cosine-similarity-quietly-assumes">What cosine similarity quietly assumes</h2>
+<p>Cosine similarity compares directions:</p>
+<p><span class="math display">\[
+\cos(\mathbf{x}, \mathbf{y}) = \frac{\sum_{i=1}^{d} x_i y_i}{\sqrt{\sum_{i=1}^{d} x_i^2}\,\sqrt{\sum_{i=1}^{d} y_i^2}}
+\]</span></p>
+<p>where <span class="math inline">\(x_i, y_i\)</span> are the coordinates of the two vectors and <span class="math inline">\(d\)</span> is the dimension. The formula is written in terms of <em>coordinates</em>, so it measures a geometric angle only if the coordinate axes are a <strong>standard orthonormal basis</strong> (perpendicular, unit length). Su et al.&nbsp;(2021) use this as a heuristic motivation: if a set of vectors is <em>isotropic</em>, it is reasonable to treat the axes as a good orthonormal basis and trust the formula; if it is not, transform it first and then take cosines. This is a motivating argument and the paper backs it with experiments.</p>
+<section id="why-non-orthonormal-axes-break-the-formula" class="level3">
+<h3 class="anchored" data-anchor-id="why-non-orthonormal-axes-break-the-formula">Why non-orthonormal axes break the formula</h3>
+<p>Suppose our embedding coordinates <span class="math inline">\((x_1, x_2)\)</span> and <span class="math inline">\((y_1, y_2)\)</span> are measured along two basis vectors <span class="math inline">\(\mathbf{b}_1, \mathbf{b}_2\)</span> that are neither perpendicular nor unit-length:</p>
+<p><span class="math display">\[
+\mathbf{x} = x_1 \mathbf{b}_1 + x_2 \mathbf{b}_2, \qquad \mathbf{y} = y_1 \mathbf{b}_1 + y_2 \mathbf{b}_2
+\]</span></p>
+<p>Taking the true geometric inner product <span class="math inline">\(\langle \mathbf{x}, \mathbf{y} \rangle\)</span> expands into four terms, collected by the <strong>Gram matrix</strong> <span class="math inline">\(\mathbf{G}_{ij} = \langle \mathbf{b}_i, \mathbf{b}_j \rangle\)</span>:</p>
+<p><span class="math display">\[
+\langle \mathbf{x}, \mathbf{y} \rangle = x_1 y_1 \|\mathbf{b}_1\|^2 + x_2 y_2 \|\mathbf{b}_2\|^2 + (x_1 y_2 + x_2 y_1)\langle \mathbf{b}_1, \mathbf{b}_2 \rangle = \mathbf{x}^\top \mathbf{G} \mathbf{y}
+\]</span></p>
+<p>The standard cosine formula <span class="math inline">\(\frac{\sum x_i y_i}{\|\mathbf{x}\|\|\mathbf{y}\|}\)</span> silently assumes <span class="math inline">\(\|\mathbf{b}_1\| = \|\mathbf{b}_2\| = 1\)</span> and <span class="math inline">\(\langle \mathbf{b}_1, \mathbf{b}_2 \rangle = 0\)</span> (i.e., <span class="math inline">\(\mathbf{G} = \mathbf{I}\)</span>). When the embedding space is anisotropic, meaning it is stretched along certain directions (<span class="math inline">\(\|\mathbf{b}_i\| \neq 1\)</span>) or correlated across dimensions (<span class="math inline">\(\langle \mathbf{b}_1, \mathbf{b}_2 \rangle \neq 0\)</span>), the naive coordinate sum drops the cross-terms and misweights the axes.</p>
+<p>This is why Su et al.&nbsp;(2021) apply a whitening transformation <span class="math inline">\(\tilde{\mathbf{x}} = (\mathbf{x} - \boldsymbol{\mu})\mathbf{W}\)</span> before computing cosine similarity: whitening forces the empirical covariance to the identity matrix, effectively rotating and rescaling the coordinate axes back into an orthonormal basis where <span class="math inline">\(\mathbf{G} = \mathbf{I}\)</span>.</p>
+</section>
+</section>
+<section id="isotropic-vs-anisotropic" class="level2">
+<h2 class="anchored" data-anchor-id="isotropic-vs-anisotropic">Isotropic vs anisotropic</h2>
+<p>A set of vectors is <strong>isotropic</strong> if its directions are spread uniformly, with no preferred direction. A practical test (used by Ethayarajh, 2019, following Arora et al., 2017): the <strong>average cosine similarity between randomly sampled pairs</strong>. For an isotropic set it is about 0. The closer it is to 1, the more <strong>anisotropic</strong> the set, which geometrically means the vectors sit in a <strong>narrow cone</strong>.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="cone.svg" class="img-fluid figure-img" alt="Left: points spread evenly around a circle, labelled isotropic. Right: points clustered in a narrow cone, labelled anisotropic. An arrow labelled whitening points from right to left."></p>
+<figcaption>Isotropic vs anisotropic embedding spaces, and what whitening does.</figcaption>
+</figure>
+</div>
+<p>There are two ingredients that make a cloud of vectors look like that cone:</p>
+<ol type="1">
+<li>A <strong>shared offset</strong>: all vectors have a large common component (a non-zero mean <span class="math inline">\(\boldsymbol{\mu}\)</span>).</li>
+<li><strong>Unequal spread</strong>: a few directions have much more variance than the rest. Instead of forming a round sphere, the cloud is stretched into a long cigar (ellipsoid). For example, if the first coordinate typically ranges around <span class="math inline">\(\pm 100\)</span> while the other <span class="math inline">\(767\)</span> coordinates range around <span class="math inline">\(\pm 0.1\)</span>, that single high-variance axis dominates <span class="math inline">\(\sum x_i y_i\)</span>, effectively reducing a <span class="math inline">\(768\)</span>-dimensional comparison to a <span class="math inline">\(1\)</span>-dimensional check.</li>
+</ol>
+<p>Whitening, as we will see, targets both.</p>
+</section>
+<section id="what-the-evidence-says-ethayarajh-2019" class="level2">
+<h2 class="anchored" data-anchor-id="what-the-evidence-says-ethayarajh-2019">What the evidence says: Ethayarajh (2019)</h2>
+<p>Ethayarajh studied hidden-layer representations (not just the input embedding table) of <strong>ELMo</strong> (2 layers), <strong>BERT-base-cased</strong> and <strong>GPT-2</strong> (12 layers each), plus each model’s input layer as “layer 0”. Input sentences came from the SemEval Semantic Textual Similarity tasks (2012 to 2016), and only words appearing in at least 5 distinct contexts were analysed.</p>
+<p><strong>Finding 1: anisotropy is everywhere.</strong> In all layers of all three models, average cosine between random words is clearly above 0 (the one exception is ELMo’s input layer, since it generates character-level embeddings without using context). It is generally larger in higher layers. For GPT-2 it is roughly 0.6 in layers 2 to 8 and then climbs; in the last layer, two random words have an average cosine similarity that is almost 1. BERT also generally rises with depth, but with an exception: its penultimate layer is noticeably more anisotropic than its last. (Approximate values here are read off the paper’s Figure 1.)</p>
+<p><strong>Finding 2: upper layers are more context-specific.</strong> Define, for a word <span class="math inline">\(w\)</span> occurring in <span class="math inline">\(n\)</span> contexts, its <strong>self-similarity</strong> in layer <span class="math inline">\(\ell\)</span>:</p>
+<p><span class="math display">\[
+\text{SelfSim}_\ell(w) = \frac{1}{n^2 - n} \sum_{j} \sum_{k \ne j} \cos\big(f_\ell(s_j, i_j),\, f_\ell(s_k, i_k)\big)
+\]</span></p>
+<p>Here <span class="math inline">\(f_\ell(s, i)\)</span> is the layer-<span class="math inline">\(\ell\)</span> representation of the word at position <span class="math inline">\(i\)</span> in sentence <span class="math inline">\(s\)</span>, so this is the average cosine between the word’s vectors across different contexts. A value of 1 means no context-specificity. Because anisotropy inflates every cosine, the paper subtracts a <strong>baseline</strong> (the average cosine of random words in that layer):</p>
+<p><span class="math display">\[
+\text{SelfSim}^*_\ell(w) = \text{SelfSim}_\ell(w) - \text{Baseline}(f_\ell)
+\]</span></p>
+<p>After that adjustment, self-similarity drops as layers go up, so representations become more context-specific. Anisotropy and context-specificity grow together; the paper suggests anisotropy is inherent to, or at least a by-product of, contextualization.</p>
+<p><strong>Finding 3: context-specificity looks different per model.</strong> Using intra-sentence similarity (how close the words in one sentence are to their mean vector), words in the same sentence grow more similar in higher ELMo layers, grow more dissimilar in BERT (while staying more similar than random words), and in GPT-2 are about as similar to each other as random words.</p>
+<p><strong>Finding 4: a single static vector explains little.</strong> The <strong>maximum explainable variance</strong> of a word is the fraction of variance in its contextualized vectors explained by their first principal component:</p>
+<p><span class="math display">\[
+\text{MEV}_\ell(w) = \frac{\sigma_1^2}{\sum_i \sigma_i^2}
+\]</span></p>
+<p>where <span class="math inline">\(\sigma_1 \ge \sigma_2 \ge \dots\)</span> are the singular values of the matrix whose rows are the word’s vectors across contexts. It is the best case for replacing all of a word’s contextual vectors with one fixed vector. After subtracting the anisotropy baseline, on average less than 5% of the variance is explained in any layer of any model. Even so, the first principal component of a word’s vectors from the lower layers makes a static embedding that beats GloVe and FastText on many word-similarity benchmarks.</p>
+<p>The paper leaves open whether making contextual representations more isotropic (for example with a penalty added to the training objective) would help.</p>
+</section>
+<section id="why-a-cone-hurts-similarity-search" class="level2">
+<h2 class="anchored" data-anchor-id="why-a-cone-hurts-similarity-search">Why a cone hurts similarity search</h2>
+<p>Write each vector as the shared offset plus a residual: <span class="math inline">\(\mathbf{x} = \boldsymbol{\mu} + \mathbf{a}\)</span>, <span class="math inline">\(\mathbf{y} = \boldsymbol{\mu} + \mathbf{b}\)</span>. Then</p>
+<p><span class="math display">\[
+\mathbf{x}\cdot\mathbf{y} = \lVert\boldsymbol{\mu}\rVert^2 + \boldsymbol{\mu}\cdot(\mathbf{a}+\mathbf{b}) + \mathbf{a}\cdot\mathbf{b}.
+\]</span></p>
+<p>The informative part, how <span class="math inline">\(\mathbf{a}\)</span> and <span class="math inline">\(\mathbf{b}\)</span> relate, is the last term. When <span class="math inline">\(\lVert\boldsymbol{\mu}\rVert\)</span> is large, the first term dominates and every pair scores near 1: the meaningful differences are squeezed into a tiny range at the top of the scale. That makes scores fragile to noise and awkward to threshold. A fixed cutoff such as “keep results above 0.9” does not repair it, because what moved is the whole scale, not just where you cut it. Similarly, a few very-high-variance directions that carry non-semantic signal can dominate the dot product. Li et al.&nbsp;(2020), cited by Su et al., report for BERT sentence embeddings that word frequency biases the space.</p>
+<p>To be precise about the claim: a narrow cone does not mathematically force the ranking to flip. If <span class="math inline">\(\boldsymbol{\mu}\cdot(\mathbf{a}+\mathbf{b})\)</span> were zero and the residuals had uniform norm and no noisy dominant directions, the <span class="math inline">\(\lVert\boldsymbol{\mu}\rVert^2\)</span> term would just shift the dot product by a constant (and compress cosine similarity monotonically toward 1) without changing which pair is higher. The problem is that real embeddings are not that clean. The empirical evidence shows that raw BERT sentence embeddings compared with cosine do poorly on similarity benchmarks, and removing the anisotropy improves them (numbers below).</p>
+</section>
+<section id="whitening" class="level2">
+<h2 class="anchored" data-anchor-id="whitening">Whitening</h2>
+<p><strong>Goal:</strong> transform the vectors so that their <strong>mean is 0</strong> and their <strong>covariance matrix is the identity</strong> matrix <span class="math inline">\(\mathbf{I}\)</span> (every direction has variance 1, and no direction is correlated with another). That is what a standard normal distribution looks like.</p>
+<section id="intuition-in-two-dimensions" class="level3">
+<h3 class="anchored" data-anchor-id="intuition-in-two-dimensions">Intuition in two dimensions</h3>
+<p>Picture the points as a tilted, stretched ellipse.</p>
+<ol type="1">
+<li><strong>Centre it</strong>: subtract the mean <span class="math inline">\(\boldsymbol{\mu}\)</span> so the cloud is around the origin (removes the shared offset).</li>
+<li><strong>Rotate it</strong>: rotate the axes to line up with the ellipse (this is what the eigenvectors <span class="math inline">\(\mathbf{U}\)</span> of the covariance do). Now the coordinates are uncorrelated.</li>
+<li><strong>Rescale it</strong>: squash the long axis and stretch the short one so every axis has variance 1 (divide each by the square root of its variance, <span class="math inline">\(\boldsymbol{\Lambda}^{-1/2}\)</span>). The ellipse becomes a circle.</li>
+</ol>
+<div class="cell" data-layout-align="default">
+<div class="cell-output-display">
+<div>
+<p></p><figure class="figure"><p></p>
+<div>
+<pre class="mermaid mermaid-js">flowchart LR
+    X["&lt;b&gt;Embeddings&lt;/b&gt;&lt;br/&gt;x ∈ ℝ&lt;sup&gt;d&lt;/sup&gt;&lt;br/&gt;N vectors"] --&gt; M["&lt;b&gt;Centre&lt;/b&gt;&lt;br/&gt;x − μ"]
+    M --&gt; R["&lt;b&gt;Rotate to principal axes&lt;/b&gt;&lt;br/&gt;(x − μ) U"]
+    R --&gt; S["&lt;b&gt;Rescale each axis&lt;/b&gt;&lt;br/&gt;(x − μ) U Λ&lt;sup&gt;−1/2&lt;/sup&gt;&lt;br/&gt;divide axis j by √λⱼ"]
+    S --&gt; Z["&lt;b&gt;Whitened&lt;/b&gt;&lt;br/&gt;x̃ = (x − μ) W&lt;br/&gt;mean 0, covariance I"]
+    S -. "keep first k columns of W" .-&gt; K["&lt;b&gt;Whitening-k&lt;/b&gt;&lt;br/&gt;x̃ ∈ ℝ&lt;sup&gt;k&lt;/sup&gt;, k &lt; d"]
+</pre>
+</div>
+<p></p></figure><p></p>
+</div>
+</div>
+</div>
+</section>
+<section id="the-formulas" class="level3">
+<h3 class="anchored" data-anchor-id="the-formulas">The formulas</h3>
+<p>Using the notation of Su et al.&nbsp;(row vectors; <span class="math inline">\(N\)</span> embeddings <span class="math inline">\(\mathbf{x}_i \in \mathbb{R}^{1\times d}\)</span>):</p>
+<p><span class="math display">\[
+\boldsymbol{\mu} = \frac{1}{N}\sum_{i=1}^{N}\mathbf{x}_i, \qquad
+\boldsymbol{\Sigma} = \frac{1}{N}\sum_{i=1}^{N}(\mathbf{x}_i-\boldsymbol{\mu})^\top(\mathbf{x}_i-\boldsymbol{\mu})
+\]</span></p>
+<p><span class="math display">\[
+\boldsymbol{\Sigma} = \mathbf{U}\boldsymbol{\Lambda}\mathbf{U}^\top \quad\text{(SVD / eigendecomposition)}, \qquad
+\mathbf{W} = \mathbf{U}\boldsymbol{\Lambda}^{-1/2}, \qquad
+\tilde{\mathbf{x}}_i = (\mathbf{x}_i - \boldsymbol{\mu})\,\mathbf{W}
+\]</span></p>
+<p>Every symbol:</p>
+<ul>
+<li><span class="math inline">\(\boldsymbol{\mu}\in\mathbb{R}^{1\times d}\)</span>: the mean embedding. Subtracting it centres the data.</li>
+<li><span class="math inline">\(\boldsymbol{\Sigma}\in\mathbb{R}^{d\times d}\)</span>: the covariance matrix; entry <span class="math inline">\((j,k)\)</span> says how coordinates <span class="math inline">\(j\)</span> and <span class="math inline">\(k\)</span> vary together (basically variance of <span class="math inline">\(\mathbf{x}_j\)</span> and <span class="math inline">\(\mathbf{x}_k\)</span>).</li>
+<li><span class="math inline">\(\mathbf{U}\)</span>: an orthogonal matrix whose columns are the principal directions (it rotates without stretching, so it preserves distances).</li>
+<li><span class="math inline">\(\boldsymbol{\Lambda}\)</span>: a diagonal matrix of variances <span class="math inline">\(\lambda_1\ge\lambda_2\ge\dots\ge\lambda_d&gt;0\)</span> along those directions.</li>
+<li><span class="math inline">\(\boldsymbol{\Lambda}^{-1/2}\)</span>: the diagonal matrix with entries <span class="math inline">\(1/\sqrt{\lambda_j}\)</span>, i.e.&nbsp;“divide each axis by its standard deviation”.</li>
+<li><span class="math inline">\(\mathbf{W}\)</span>: the single <span class="math inline">\(d\times d\)</span> matrix that does rotate-and-rescale; applying it is one matrix multiply.</li>
+</ul>
+<p>In column-vector notation (used in some textbooks), the same transform reads <span class="math inline">\(\tilde{\mathbf{h}} = \boldsymbol{\Lambda}^{-1/2}\mathbf{U}^\top(\mathbf{h}-\boldsymbol{\mu})\)</span>; it is the transpose of the row form.</p>
+<p>The check that this gives identity covariance is two lines of algebra; see the <a href="../../posts/anisotropy-whitening/derivation.html">derivation page</a>. A tiny example: if <span class="math inline">\(\boldsymbol{\Sigma}=\text{diag}(4, 1)\)</span> then <span class="math inline">\(\mathbf{U}=\mathbf{I}\)</span>, <span class="math inline">\(\mathbf{W}=\text{diag}(1/2, 1)\)</span>, so the first coordinate is halved (its standard deviation was 2) and the second is left alone: both now have variance 1.</p>
+</section>
+<section id="whitening-k-shrinking-the-vectors" class="level3">
+<h3 class="anchored" data-anchor-id="whitening-k-shrinking-the-vectors">Whitening-<span class="math inline">\(k\)</span>: shrinking the vectors</h3>
+<p>The values <span class="math inline">\(\lambda_j\)</span> are sorted from largest to smallest. A direction with tiny <span class="math inline">\(\lambda_j\)</span> barely varies, so it carries little information. Keeping only the <strong>first <span class="math inline">\(k\)</span> columns</strong> of <span class="math inline">\(\mathbf{W}\)</span> gives vectors in <span class="math inline">\(\mathbb{R}^{k}\)</span>:</p>
+<p><span class="math display">\[
+\tilde{\mathbf{x}}_i = (\mathbf{x}_i-\boldsymbol{\mu})\,\mathbf{W}[:, :k]
+\]</span></p>
+<p>This is equivalent to PCA (keep the top directions) followed by the per-axis rescaling. Su et al.&nbsp;call it <strong>Whitening-<span class="math inline">\(k\)</span></strong>. Because the cost of comparing two vectors grows with their dimension, a smaller <span class="math inline">\(k\)</span> also means smaller storage and cheaper similarity computation (the paper motivates the faster-retrieval claim this way). <span class="math inline">\(k\)</span> is a hyperparameter: for most of their tasks, cutting to about a third of the original dimension was near the best.</p>
+</section>
+<section id="what-it-costs" class="level3">
+<h3 class="anchored" data-anchor-id="what-it-costs">What it costs</h3>
+<p>You need <span class="math inline">\(\boldsymbol{\mu}\)</span> (<span class="math inline">\(1\times d\)</span>) and <span class="math inline">\(\boldsymbol{\Sigma}\)</span> (<span class="math inline">\(d\times d\)</span>) from a representative corpus of <span class="math inline">\(N\)</span> vectors, a one-time computation of <span class="math inline">\(O(N\cdot d^2)\)</span>. Both can be accumulated incrementally in a single streaming pass (without storing the vectors); the memory needed does not grow with <span class="math inline">\(N\)</span>. At query time whitening is one matrix multiply per vector.</p>
+</section>
+</section>
+<section id="what-the-experiments-show-su-et-al.-2021" class="level2">
+<h2 class="anchored" data-anchor-id="what-the-experiments-show-su-et-al.-2021">What the experiments show (Su et al., 2021)</h2>
+<p>They evaluate on seven semantic textual similarity sets, reporting Spearman correlation (<span class="math inline">\(\times 100\)</span>) between the cosine of two sentence embeddings and human similarity scores. Sentence embeddings are the average of BERT’s first and last layers. “Target” means whitening statistics fitted on the unlabeled sentences of the evaluation dataset; “NLI” means fitted on an NLI corpus. The comparison baseline, BERT-flow (Li et al., 2020), is a more complex method that learns a neural-network transformation to a Gaussian.</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>BERT-base, STS-B</th>
+<th>Spearman</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>raw (first-last-avg)</td>
+<td>59.04</td>
+</tr>
+<tr class="even">
+<td>BERT-flow (target)</td>
+<td>70.72</td>
+</tr>
+<tr class="odd">
+<td>whitening (NLI)</td>
+<td>68.19</td>
+</tr>
+<tr class="even">
+<td>whitening (target)</td>
+<td>71.34</td>
+</tr>
+<tr class="odd">
+<td>whitening-256 (target)</td>
+<td>71.43</td>
+</tr>
+</tbody>
+</table>
+<p>So whitening is competitive with the flow method, and cutting 768 to 256 dimensions did not hurt here. Two honest caveats from the same tables:</p>
+<ul>
+<li><strong>It is not uniformly better.</strong> On SICK-R with BERT-base, raw scores 63.75 while whitening (target) gives 60.6 and whitening-256 (target) gives 62.2.</li>
+<li><strong>Gains shrink for models already trained for similarity.</strong> For Sentence-BERT trained on NLI data, STS-B goes from 77.63 to 80.50 with target whitening (80.80 at 256 dimensions), with mixed results across other datasets.</li>
+</ul>
+<p>The dimension matters: the paper plots score against <span class="math inline">\(k\)</span> for each task, and the best <span class="math inline">\(k\)</span> differs by task (for example, SICK-R with BERT-base (NLI) rises to 66.52 at <span class="math inline">\(k=109\)</span>).</p>
+</section>
+<section id="try-it-a-numpy-demo" class="level2">
+<h2 class="anchored" data-anchor-id="try-it-a-numpy-demo">Try it: a NumPy demo</h2>
+<p>Synthetic data (our own), designed to be anisotropic: a large shared offset, three huge-variance directions that carry no topic information, and four “topics” hidden in small differences. We measure the average random-pair cosine and a retrieval-style score: for each vector, what fraction of its 10 nearest neighbours (by cosine) share its topic (P@10).</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>rng <span class="op">=</span> np.random.default_rng(<span class="dv">0</span>)</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>d, n_topics, per_topic <span class="op">=</span> <span class="dv">64</span>, <span class="dv">4</span>, <span class="dv">250</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="co"># --- synthetic "anisotropic" embeddings -------------------------------------</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="co"># (1) a big shared offset: every vector leans the same way</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>common <span class="op">=</span> rng.normal(size<span class="op">=</span>d)</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>common <span class="op">*=</span> <span class="fl">6.0</span> <span class="op">/</span> np.linalg.norm(common)</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="co"># (2) three non-semantic directions with huge variance, the rest tiny</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>scales <span class="op">=</span> np.concatenate([[<span class="fl">4.0</span>, <span class="fl">3.0</span>, <span class="fl">2.0</span>], np.full(d <span class="op">-</span> <span class="dv">3</span>, <span class="fl">0.15</span>)])</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="co"># (3) the "semantics": topic centres, small in every direction</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>centres <span class="op">=</span> rng.normal(size<span class="op">=</span>(n_topics, d)) <span class="op">*</span> <span class="fl">0.3</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>topic <span class="op">=</span> np.repeat(np.arange(n_topics), per_topic)</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>X <span class="op">=</span> common <span class="op">+</span> centres[topic] <span class="op">+</span> rng.normal(size<span class="op">=</span>(<span class="bu">len</span>(topic), d)) <span class="op">*</span> scales</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> unit(A):</span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> A <span class="op">/</span> np.linalg.norm(A, axis<span class="op">=</span><span class="dv">1</span>, keepdims<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> mean_cosine(A):</span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Average cosine over all pairs of distinct rows."""</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    S <span class="op">=</span> unit(A) <span class="op">@</span> unit(A).T</span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    n <span class="op">=</span> <span class="bu">len</span>(A)</span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">float</span>((S.<span class="bu">sum</span>() <span class="op">-</span> n) <span class="op">/</span> (n <span class="op">*</span> (n <span class="op">-</span> <span class="dv">1</span>)))</span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> precision_at_10(Z):</span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Of each vector's 10 nearest neighbours (cosine), what fraction share its topic?"""</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>    S <span class="op">=</span> unit(Z) <span class="op">@</span> unit(Z).T</span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>    np.fill_diagonal(S, <span class="op">-</span>np.inf)</span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>    nn <span class="op">=</span> np.argsort(<span class="op">-</span>S, axis<span class="op">=</span><span class="dv">1</span>)[:, :<span class="dv">10</span>]</span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">float</span>((topic[nn] <span class="op">==</span> topic[:, <span class="va">None</span>]).mean())</span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> fit_whitening(X, k<span class="op">=</span><span class="va">None</span>):</span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Su et al. notation (row vectors): x_tilde = (x - mu) @ W, with W = U Lambda^{-1/2}."""</span></span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>    mu <span class="op">=</span> X.mean(axis<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>    Xc <span class="op">=</span> X <span class="op">-</span> mu</span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a>    cov <span class="op">=</span> Xc.T <span class="op">@</span> Xc <span class="op">/</span> <span class="bu">len</span>(X)             <span class="co"># Sigma = (1/N) sum (x-mu)^T (x-mu)</span></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>    U, lam, _ <span class="op">=</span> np.linalg.svd(cov)       <span class="co"># Sigma = U diag(lam) U^T, lam sorted descending</span></span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a>    W <span class="op">=</span> U <span class="op">/</span> np.sqrt(lam)                 <span class="co"># scale column j of U by 1 / sqrt(lam_j)</span></span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> mu, (W <span class="cf">if</span> k <span class="kw">is</span> <span class="va">None</span> <span class="cf">else</span> W[:, :k])</span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a>mu, W <span class="op">=</span> fit_whitening(X)</span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a>Xw <span class="op">=</span> (X <span class="op">-</span> mu) <span class="op">@</span> W</span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"mean cosine, random pairs:  raw </span><span class="sc">{</span>mean_cosine(X)<span class="sc">:.3f}</span><span class="ss"> | whitened </span><span class="sc">{</span>mean_cosine(Xw)<span class="sc">:.3f}</span><span class="ss">"</span>)</span>
+<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"max |Cov(whitened) - I|:    </span><span class="sc">{</span>np<span class="sc">.</span><span class="bu">abs</span>(np.cov(Xw, rowvar<span class="op">=</span><span class="va">False</span>, bias<span class="op">=</span><span class="va">True</span>) <span class="op">-</span> np.eye(d))<span class="sc">.</span><span class="bu">max</span>()<span class="sc">:.1e}</span><span class="ss">"</span>)</span>
+<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>()</span>
+<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"P@10 raw            </span><span class="sc">{</span>precision_at_10(X)<span class="sc">:.3f}</span><span class="ss">"</span>)</span>
+<span id="cb1-49"><a href="#cb1-49" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"P@10 centred only   </span><span class="sc">{</span>precision_at_10(X <span class="op">-</span> mu)<span class="sc">:.3f}</span><span class="ss">"</span>)</span>
+<span id="cb1-50"><a href="#cb1-50" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> k <span class="kw">in</span> (<span class="dv">4</span>, <span class="dv">8</span>, <span class="dv">16</span>, <span class="dv">32</span>, <span class="dv">64</span>):</span>
+<span id="cb1-51"><a href="#cb1-51" aria-hidden="true" tabindex="-1"></a>    mu_k, W_k <span class="op">=</span> fit_whitening(X, k)</span>
+<span id="cb1-52"><a href="#cb1-52" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"P@10 whitening-</span><span class="sc">{</span>k<span class="sc">:&lt;3}</span><span class="ss">  </span><span class="sc">{</span>precision_at_10((X <span class="op">-</span> mu_k) <span class="op">@</span> W_k)<span class="sc">:.3f}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Output:</p>
+<pre class="text"><code>mean cosine, random pairs:  raw 0.539 | whitened -0.001
+max |Cov(whitened) - I|:    6.2e-15
+
+P@10 raw            0.968
+P@10 centred only   0.975
+P@10 whitening-4    0.707
+P@10 whitening-8    1.000
+P@10 whitening-16   0.954
+P@10 whitening-32   0.744
+P@10 whitening-64   0.563</code></pre>
+<p>What to notice:</p>
+<ul>
+<li>The average random-pair cosine goes from 0.539 to about 0: isotropy restored, and the covariance of the whitened data is the identity to numerical precision.</li>
+<li>On this toy data, the raw ranking is already good (P@10 0.968). Anisotropy does not automatically break retrieval; this matches the point made above.</li>
+<li><strong>Full whitening (<span class="math inline">\(k=64\)</span>) made P@10 worse (0.563).</strong> Dividing by <span class="math inline">\(\sqrt{\lambda_j}\)</span> blows up the directions with almost no variance, which here are mostly noise. Truncating to a small <span class="math inline">\(k\)</span> fixed it (1.000 at <span class="math inline">\(k=8\)</span>), and the best <span class="math inline">\(k\)</span> is data-dependent. This is the same effect the paper’s <span class="math inline">\(k\)</span>-sweep plots.</li>
+</ul>
+</section>
+<section id="alternatives" class="level2">
+<h2 class="anchored" data-anchor-id="alternatives">Alternatives</h2>
+<ul>
+<li><strong>All-but-the-top</strong> (Mu &amp; Viswanath, 2018): subtract the mean and remove a few of the top principal directions.</li>
+<li><strong>BERT-flow</strong> (Li et al., 2020): learn an invertible neural network that maps the embedding distribution to a Gaussian.</li>
+<li><strong>Regularisation during training</strong> (Gao et al., 2019): penalise similarity between word embeddings so the cone widens.</li>
+<li><strong>Contrastive fine-tuning</strong>, for example SimCSE (Gao et al., 2021): train the encoder directly so that similar texts are close and others are spread out.</li>
+</ul>
+</section>
+<section id="common-pitfalls" class="level2">
+<h2 class="anchored" data-anchor-id="common-pitfalls">Common pitfalls</h2>
+<ul>
+<li><strong>Fit on a representative corpus.</strong> <span class="math inline">\(\boldsymbol{\mu}\)</span> and <span class="math inline">\(\boldsymbol{\Sigma}\)</span> describe your data. Statistics from a different domain can transfer worse (in the paper, target-fitted and NLI-fitted whitening win on different datasets).</li>
+<li><strong>Transform queries and documents identically.</strong> Use the same stored <span class="math inline">\(\boldsymbol{\mu}\)</span> and <span class="math inline">\(\mathbf{W}\)</span> for both, and rebuild any vector index built on the raw vectors.</li>
+<li><strong>Do not whiten blindly to full rank.</strong> Small-variance directions get amplified (see the demo). Choose <span class="math inline">\(k\)</span> on a validation task. If you have fewer vectors than dimensions (<span class="math inline">\(N&lt;d\)</span>), <span class="math inline">\(\boldsymbol{\Sigma}\)</span> is singular and cannot be inverted, so <span class="math inline">\(k\)</span> must be below its rank (or add a small constant to the variances).</li>
+<li><strong>Expect uneven gains.</strong> Models already trained for similarity benefit less, and some datasets get worse.</li>
+<li><strong>Do not mix up the settings.</strong> Ethayarajh analyses hidden states of language models; Su et al.&nbsp;whiten sentence embeddings built from BERT layers. Neither is the same thing as the input embedding table, nor as a dedicated text-embedding model.</li>
+<li><strong>Measure your own baseline.</strong> Compute the average random-pair cosine on your data before deciding it is a problem.</li>
+</ul>
+</section>
+<section id="references" class="level2">
+<h2 class="anchored" data-anchor-id="references">References</h2>
+<ul>
+<li>Ethayarajh, K. (2019). <em>How Contextual are Contextualized Word Representations? Comparing the Geometry of BERT, ELMo, and GPT-2 Embeddings.</em> EMNLP-IJCNLP 2019. arXiv:1909.00512.</li>
+<li>Su, J., Cao, J., Liu, W., Ou, Y. (2021). <em>Whitening Sentence Representations for Better Semantics and Faster Retrieval.</em> arXiv:2103.15316.</li>
+<li>Arora, S., Liang, Y., Ma, T. (2017). <em>A simple but tough-to-beat baseline for sentence embeddings.</em> ICLR 2017.</li>
+<li>Li, B., Zhou, H., He, J., Wang, M., Yang, Y., Li, L. (2020). <em>On the sentence embeddings from pre-trained language models.</em> EMNLP 2020.</li>
+<li>Mu, J., Viswanath, P. (2018). <em>All-but-the-top: Simple and effective postprocessing for word representations.</em> ICLR 2018.</li>
+<li>Gao, J., He, D., Tan, X., Qin, T., Wang, L., Liu, T.-Y. (2019). <em>Representation degeneration problem in training natural language generation models.</em> ICLR 2019.</li>
+<li>Gao, T., Yao, X., Chen, D. (2021). <em>SimCSE: Simple contrastive learning of sentence embeddings.</em> EMNLP 2021.</li>
+<li>Roitman, H. <em>The Hitchhiker’s Guide to Agentic AI: From Foundations to Systems</em> (arXiv:2606.24937), §1.3.4.</li>
+</ul>
+<hr>
+<p>This work adapts material from “The Hitchhiker’s Guide to Agentic AI” by Haggai Roitman (arXiv:2606.24937v3, book version 1.4), licensed under CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/). Changes: adapted into standalone articles, with added explanations, diagrams and examples. This work is licensed under CC BY-SA 4.0.</p>
+
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp("https:\/\/skartheekYT\.github\.io\/");
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+<footer class="footer">
+  <div class="nav-footer">
+    <div class="nav-footer-left">
+      &nbsp;
+    </div>   
+    <div class="nav-footer-center">
+<p>Content licensed under <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a></p>
+</div>
+    <div class="nav-footer-right">
+      &nbsp;
+    </div>
+  </div>
+</footer>
+
+
+
+
+</body></html>
