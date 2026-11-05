@@ -6,7 +6,7 @@ draft: false
 categories: [llm, embeddings, transformers]
 ---
 
-A transformer cannot read text, and it cannot do much with integers either. Before any attention happens, every token ID has to become a vector of real numbers. This article covers that first step: what the **embedding layer** is, where its numbers come from, and why the *shape* of the resulting vector space matters for things like retrieval.
+A transformer cannot read text, and it can't do much with integers either. Before any attention happens, every token ID must be converted into a vector of real numbers that capture its underlying meaning. This article covers that first step: what the **embedding layer** is, where its numbers come from, and why the *shape* of the resulting vector space matters for things like retrieval.
 
 This is the follow-up to the [tokenization article](../tokenization-bpe/index.qmd), which ended at the point where text has become a sequence of integer token IDs.
 
@@ -17,7 +17,7 @@ After tokenization, a sentence is a list of integers, for example `[791, 4062, 1
 The classic fix is **one-hot encoding**: for a vocabulary of size $|V|$, token $i$ becomes a vector of length $|V|$ with a 1 at position $i$ and 0 everywhere else. That removes the fake ordering, but it has two problems:
 
 - It is huge and almost entirely zeros (for $|V| = 128{,}000$, one token is a 128,000-dimensional vector).
-- Every pair of distinct tokens is exactly equally far apart. "king" is no closer to "queen" than to "bicycle", so the encoding carries no notion of similarity.
+- Every pair of distinct tokens is exactly equally far apart (there is no geometry). "king" is no closer to "queen" than to "bicycle", so the encoding carries no notion of similarity.
 
 An **embedding** replaces this with a short, dense, *learned* vector, typically a few thousand numbers, where similarity can be expressed by geometry.
 
@@ -67,7 +67,7 @@ $$
 128{,}256 \times 4{,}096 \approx 525\text{M parameters},
 $$
 
-roughly 6.5% of an ~8B-parameter model. The embedding table is a non-trivial slice of the model, and it grows linearly with the vocabulary, which is one reason vocabulary size is a design decision (see the tokenization article).
+roughly 6.5% of an ~8B-parameter model. The embedding table is a non-trivial slice of the model, and it grows linearly with the vocabulary, which is one reason vocabulary size is a design decision.
 
 ## Where do the vectors come from?
 
@@ -86,7 +86,7 @@ $$
 
 So the logits (the raw scores before softmax) for a final hidden vector $\mathbf{h}$ are $\mathbf{h}\,\mathbf{E}^\top$: the model scores each token by how well $\mathbf{h}$ lines up with that token's embedding. Tying saves $|V| \times d$ parameters and ties the "reading" and "writing" vocabularies together. Not every model does it (GPT-2 does; plenty of large models keep separate input and output matrices).
 
-One consequence: with tying, *every* row of $\mathbf{E}$ gets gradient from the output softmax, so the sparse-update picture above only describes the input lookup.
+One consequence: with tying, *every* row of $\mathbf{E}$ gets gradient updates from the output softmax as well, so the sparse-update picture above only describes the input lookup.
 
 ## Measuring closeness: cosine similarity
 
@@ -108,11 +108,11 @@ How much does context change them? Ethayarajh (2019) measured this for ELMo, BER
 
 ## A geometry problem: anisotropy
 
-Here is the catch for anyone who wants to use these vectors for similarity search, clustering or recommendation. If vectors were spread evenly over all directions (**isotropic**), two totally unrelated vectors would have cosine similarity about 0. Ethayarajh found that in practice, contextualized representations are **anisotropic**: they sit in a **narrow cone**, so random pairs already have a high cosine similarity. The anisotropy in GPT-2's final layer is so extreme that any two random words have an almost perfect cosine similarity on average.
+There is a significant structural challenge in using these vectors for similarity search, clustering, or recommendation. If vectors were spread evenly over all directions (**isotropic**), two totally unrelated vectors would have cosine similarity about 0. Ethayarajh found that in practice, contextualized representations are **anisotropic**: they sit in a **narrow cone**, so random pairs already have a high cosine similarity. The anisotropy in GPT-2's final layer is so extreme that any two random words have an almost perfect cosine similarity on average.
 
 ```{mermaid}
 flowchart LR
-    A["<b>Anisotropic</b><hr/><small>• vectors in a narrow cone<br/>• random pair: cos ≈ 1</small>"] -- "whitening" --> B["<b>Isotropic</b><hr/><small>• directions spread evenly<br/>• random pair: cos ≈ 0</small>"]
+    A["<b>Anisotropic</b><br/><small>• vectors in a narrow cone<br/>• random pair: cos ≈ 1</small>"] -- "whitening" --> B["<b>Isotropic</b><br/><small>• directions spread evenly<br/>• random pair: cos ≈ 0</small>"]
 ```
 
 A common post-processing fix is **whitening**: shift the vectors so their mean is zero, then rotate and rescale so every direction has the same spread. In the notation of Su et al. (2021), with $\mathbf{x}$ an embedding, $\boldsymbol{\mu}$ the mean embedding over a corpus, and $\mathbf{W}$ a matrix computed from the corpus covariance:

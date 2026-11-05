@@ -1,0 +1,174 @@
+---
+title: "Companion: Principal Components, SVD, and Maximum Explainable Variance"
+description: "Step-by-step derivation connecting sample covariance, variance maximization, Singular Value Decomposition (SVD), and the MEV ratio."
+date: "2026-11-01"
+draft: false
+categories: [llm, embeddings, math]
+---
+
+This page is a companion to [Anisotropy and Whitening](index.qmd). It derives from scratch why the **maximum explainable variance (MEV)** along a single axis equals the ratio of squared singular values $\sigma_1^2 / \sum_i \sigma_i^2$, and shows how singular values connect to the eigenvalues of $\mathbf{X}^\top \mathbf{X}$. Nothing is skipped—even the proportionality between covariance and $\mathbf{X}^\top \mathbf{X}$ is written out entry by entry.
+
+*(Note on notation: in the main article and [whitening derivation](derivation.qmd), $\boldsymbol{\Sigma}$ denotes the covariance matrix. Here we follow the standard SVD convention where $\boldsymbol{\Sigma}$ is the rectangular diagonal matrix of singular values $\sigma_i$, and we write $\mathbf{S}$ for the sample covariance matrix.)*
+
+## Step 1: the centred data matrix
+
+Let $\mathbf{X} \in \mathbb{R}^{n \times d}$ be a data matrix of $n$ observations (rows)—for instance, $n$ contextualized occurrences of a word $w$—across $d$ embedding dimensions (columns).
+
+Before measuring variance, we mean-centre each column. Let $\bar{x}_j = \frac{1}{n} \sum_{i=1}^n X_{ij}$ be the mean of column $j$, and replace every entry $X_{ij}$ with $X_{ij} - \bar{x}_j$. After centring, the mean of every column of $\mathbf{X}$ is zero.
+
+## Step 2: deriving the exact sample covariance matrix
+
+The sample covariance between two coordinates (columns) $j$ and $k$ is defined as:
+
+$$
+S_{jk} = \frac{1}{n-1} \sum_{i=1}^n (X_{ij} - \bar{x}_j)(X_{ik} - \bar{x}_k).
+$$
+
+Because we centred $\mathbf{X}$ in Step 1, $\bar{x}_j = 0$ and $\bar{x}_k = 0$, so this simplifies to:
+
+$$
+S_{jk} = \frac{1}{n-1} \sum_{i=1}^n X_{ij} X_{ik}.
+$$
+
+Notice that $\sum_{i=1}^n X_{ij} X_{ik}$ is the dot product of column $j$ and column $k$ of $\mathbf{X}$. Multiplying $\mathbf{X}^\top$ ($d \times n$) by $\mathbf{X}$ ($n \times d$) computes all column dot products at once. Therefore, the exact $d \times d$ sample covariance matrix $\mathbf{S}$ is:
+
+$$
+\mathbf{S} = \frac{1}{n-1} \mathbf{X}^\top \mathbf{X}.
+$$
+
+## Step 3: projecting the data onto a 1D axis
+
+We want to compress our $d$-dimensional vectors onto a single 1D direction that retains as much spread as possible. Represent that direction by a unit column vector $\mathbf{v} \in \mathbb{R}^{d \times 1}$:
+
+$$
+\mathbf{v}^\top \mathbf{v} = 1.
+$$
+
+Projecting all $n$ row vectors in $\mathbf{X}$ onto $\mathbf{v}$ is the matrix-vector product
+
+$$
+\mathbf{z} = \mathbf{X}\mathbf{v} \in \mathbb{R}^{n \times 1},
+$$
+
+where $z_i$ is the coordinate of the $i$-th observation along the axis $\mathbf{v}$.
+
+## Step 4: variance of the projected data
+
+Because the columns of $\mathbf{X}$ have mean zero, their linear combination $\mathbf{z} = \mathbf{X}\mathbf{v}$ also has mean zero ($\bar{z} = 0$). The sample variance of the 1D projections $z_1, \dots, z_n$ is therefore:
+
+$$
+\text{Var}(\mathbf{z}) = \frac{1}{n-1} \sum_{i=1}^n (z_i - \bar{z})^2 = \frac{1}{n-1} \mathbf{z}^\top \mathbf{z}.
+$$
+
+Substitute $\mathbf{z} = \mathbf{X}\mathbf{v}$:
+
+$$
+\text{Var}(\mathbf{z}) = \frac{1}{n-1} (\mathbf{X}\mathbf{v})^\top (\mathbf{X}\mathbf{v}) = \mathbf{v}^\top \left( \frac{1}{n-1} \mathbf{X}^\top \mathbf{X} \right) \mathbf{v} = \mathbf{v}^\top \mathbf{S} \mathbf{v}.
+$$
+
+## Step 5: maximizing variance via Lagrange multipliers
+
+We want to choose $\mathbf{v}$ to maximize $\mathbf{v}^\top \mathbf{S} \mathbf{v}$ subject to the unit-length constraint $\mathbf{v}^\top \mathbf{v} = 1$. Form the Lagrangian with multiplier $\lambda$:
+
+$$
+\mathcal{L}(\mathbf{v}, \lambda) = \mathbf{v}^\top \mathbf{S} \mathbf{v} - \lambda(\mathbf{v}^\top \mathbf{v} - 1).
+$$
+
+Differentiate with respect to $\mathbf{v}$ (using $\frac{\partial}{\partial \mathbf{v}}(\mathbf{v}^\top \mathbf{S} \mathbf{v}) = 2\mathbf{S}\mathbf{v}$ for symmetric $\mathbf{S}$) and set the gradient to $\mathbf{0}$:
+
+$$
+\frac{\partial \mathcal{L}}{\partial \mathbf{v}} = 2\mathbf{S}\mathbf{v} - 2\lambda \mathbf{v} = \mathbf{0} \implies \mathbf{S}\mathbf{v} = \lambda \mathbf{v}.
+$$
+
+This is the classic eigenvalue equation:
+
+- Any stationary direction $\mathbf{v}$ must be an **eigenvector** of the covariance matrix $\mathbf{S}$.
+- Left-multiplying both sides by $\mathbf{v}^\top$ gives $\mathbf{v}^\top \mathbf{S} \mathbf{v} = \lambda \mathbf{v}^\top \mathbf{v} = \lambda$.
+
+Because $\mathbf{v}^\top \mathbf{S} \mathbf{v}$ is the variance of the projected data from Step 4, **the eigenvalue $\lambda$ is the exact variance explained by the direction $\mathbf{v}$**. To capture the maximum possible variance along a single axis, we pick the eigenvector $\mathbf{v}_1$ corresponding to the largest eigenvalue $\lambda_1$. That vector is the **first principal component**, and the subsequent eigenvectors $\mathbf{v}_2, \dots, \mathbf{v}_d$ (with $\lambda_1 \ge \lambda_2 \ge \dots \ge \lambda_d \ge 0$) capture the maximum remaining variance along orthogonal directions.
+
+## Step 6: connecting SVD to the eigenvalues of $\mathbf{X}^\top \mathbf{X}$
+
+Any real matrix $\mathbf{X} \in \mathbb{R}^{n \times d}$ has a **Singular Value Decomposition (SVD)**:
+
+$$
+\mathbf{X} = \mathbf{U}\boldsymbol{\Sigma}\mathbf{V}^\top,
+$$
+
+where:
+
+- $\mathbf{U} \in \mathbb{R}^{n \times n}$ is orthogonal ($\mathbf{U}^\top \mathbf{U} = \mathbf{I}_n$), containing the left singular vectors as columns.
+- $\boldsymbol{\Sigma} \in \mathbb{R}^{n \times d}$ is rectangular diagonal with non-negative **singular values** $\sigma_1 \ge \sigma_2 \ge \dots \ge 0$ along its main diagonal.
+- $\mathbf{V} \in \mathbb{R}^{d \times d}$ is orthogonal ($\mathbf{V}^\top \mathbf{V} = \mathbf{V}\mathbf{V}^\top = \mathbf{I}_d$), containing the right singular vectors as columns.
+
+Substitute $\mathbf{X} = \mathbf{U}\boldsymbol{\Sigma}\mathbf{V}^\top$ into $\mathbf{X}^\top \mathbf{X}$:
+
+$$
+\mathbf{X}^\top \mathbf{X} = (\mathbf{U}\boldsymbol{\Sigma}\mathbf{V}^\top)^\top (\mathbf{U}\boldsymbol{\Sigma}\mathbf{V}^\top) = \mathbf{V}\boldsymbol{\Sigma}^\top \underbrace{\mathbf{U}^\top \mathbf{U}}_{\mathbf{I}_n} \boldsymbol{\Sigma}\mathbf{V}^\top = \mathbf{V}(\boldsymbol{\Sigma}^\top \boldsymbol{\Sigma})\mathbf{V}^\top.
+$$
+
+Here $\boldsymbol{\Sigma}^\top \boldsymbol{\Sigma}$ is a $d \times d$ diagonal matrix whose $i$-th diagonal entry is $\sigma_i^2$. Right-multiplying both sides by $\mathbf{V}$ (and using $\mathbf{V}^\top \mathbf{V} = \mathbf{I}_d$) gives:
+
+$$
+(\mathbf{X}^\top \mathbf{X})\mathbf{V} = \mathbf{V}(\boldsymbol{\Sigma}^\top \boldsymbol{\Sigma}), \qquad\text{or column by column:}\qquad (\mathbf{X}^\top \mathbf{X})\mathbf{v}_i = \sigma_i^2 \mathbf{v}_i.
+$$
+
+Dividing by $n - 1$ links this directly to our covariance matrix $\mathbf{S} = \frac{1}{n-1}\mathbf{X}^\top \mathbf{X}$:
+
+$$
+\mathbf{S}\mathbf{v}_i = \left(\frac{\sigma_i^2}{n-1}\right)\mathbf{v}_i.
+$$
+
+Comparing this with $\mathbf{S}\mathbf{v}_i = \lambda_i \mathbf{v}_i$ from Step 5 gives two fundamental identities:
+
+1. **Principal components are right singular vectors:** the columns $\mathbf{v}_i$ of $\mathbf{V}$ are the exact eigenvectors of $\mathbf{X}^\top \mathbf{X}$ and of $\mathbf{S}$.
+2. **Singular values vs. eigenvalues:** the squared singular values $\sigma_i^2$ of $\mathbf{X}$ are the eigenvalues of $\mathbf{X}^\top \mathbf{X}$, and the variance explained by the $i$-th principal component is $\lambda_i = \frac{\sigma_i^2}{n-1}$.
+
+## Step 7: the Maximum Explainable Variance (MEV) formula
+
+The proportion of total variance explained by the first $k$ principal components is the sum of the first $k$ variances divided by the total variance across all directions:
+
+$$
+\text{Explained Variance Ratio}(k) = \frac{\sum_{i=1}^k \lambda_i}{\sum_{i=1}^d \lambda_i} = \frac{\sum_{i=1}^k \frac{\sigma_i^2}{n-1}}{\sum_{i=1}^d \frac{\sigma_i^2}{n-1}} = \frac{\sum_{i=1}^k \sigma_i^2}{\sum_{i=1}^d \sigma_i^2}.
+$$
+
+The $\frac{1}{n-1}$ factors cancel out. Setting $k = 1$ gives the exact proportion of variance captured by the single best 1D axis—which is Ethayarajh's (2019) **maximum explainable variance**:
+
+$$
+\text{MEV} = \frac{\sigma_1^2}{\sum_{i} \sigma_i^2}.
+$$
+
+::: {.callout-note}
+### Centred vs. uncentred occurrence matrices
+In Ethayarajh (2019), $\text{MEV}_\ell(w)$ is computed directly on the uncentred occurrence matrix $\mathbf{X}_w$ of a word's vectors across contexts. Without centring, $\mathbf{X}_w^\top \mathbf{X}_w$ is the raw second-moment matrix rather than the centred covariance, and $\sigma_1^2 / \sum_i \sigma_i^2$ measures the fraction of total squared length $\|\mathbf{X}_w\|_F^2$ captured by the single best static vector. Because all vectors in an anisotropic layer share a large common offset (they sit in a narrow cone), $\sigma_1^2$ is automatically large even for unrelated words—which is why the paper subtracts the random-word baseline $\text{Baseline}_{\text{MEV}}(f_\ell)$ before interpreting the result.
+:::
+
+## How are the singular values $\sigma_i$ actually computed?
+
+There are two ways to obtain the singular values $\sigma_i$: the algebraic route (by hand for small matrices) and the numerical route (used by `numpy.linalg.svd` and `torch.linalg.svd`).
+
+### 1. By hand: characteristic polynomial of $\mathbf{X}^\top \mathbf{X}$
+
+1. Form the $d \times d$ symmetric matrix $\mathbf{M} = \mathbf{X}^\top \mathbf{X}$.
+2. Write the eigenvalue condition $\mathbf{M}\mathbf{v} = \lambda \mathbf{v}$ as $(\mathbf{M} - \lambda \mathbf{I})\mathbf{v} = \mathbf{0}$.
+3. A non-zero eigenvector $\mathbf{v}$ exists if and only if $\mathbf{M} - \lambda \mathbf{I}$ is singular, meaning its determinant is zero:
+   $$
+   \det(\mathbf{X}^\top \mathbf{X} - \lambda \mathbf{I}) = 0.
+   $$
+4. Solve this degree-$d$ polynomial for its roots $\lambda_1 \ge \lambda_2 \ge \dots \ge \lambda_d \ge 0$, and take their square roots:
+   $$
+   \sigma_i = \sqrt{\lambda_i}.
+   $$
+
+### 2. In software: direct SVD without forming $\mathbf{X}^\top \mathbf{X}$
+
+Standard libraries avoid multiplying $\mathbf{X}^\top \mathbf{X}$ directly because doing so **squares the condition number** of $\mathbf{X}$: if a small singular value is $10^{-8}$, squaring it into $\lambda_i = 10^{-16}$ wipes it out in 64-bit floating-point arithmetic.
+
+Instead, numerical SVD algorithms (such as Golub–Kahan) work on $\mathbf{X}$ directly in two stages:
+
+1. **Bidiagonalisation:** multiply $\mathbf{X}$ on the left and right by orthogonal Householder reflection matrices to zero out everything except the main diagonal and the superdiagonal, producing a bidiagonal matrix $\mathbf{B} = \mathbf{P}^\top \mathbf{X} \mathbf{Q}$. Because orthogonal transforms preserve lengths and angles, $\mathbf{B}$ has the exact same singular values as $\mathbf{X}$.
+2. **Iterative QR shifts:** apply fast implicit QR steps to $\mathbf{B}$ until its superdiagonal entries shrink to zero, leaving the singular values $\sigma_i$ sitting directly on the diagonal without ever squaring the matrix.
+
+---
+
+This work adapts material from "The Hitchhiker's Guide to Agentic AI" by Haggai Roitman (arXiv:2606.24937v3, book version 1.4), licensed under CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/). Changes: adapted into standalone articles, with added explanations, diagrams and examples. This work is licensed under CC BY-SA 4.0.

@@ -53,35 +53,72 @@ Whitening, as we will see, targets both.
 
 ## What the evidence says: Ethayarajh (2019)
 
-Ethayarajh studied hidden-layer representations (not just the input embedding table) of **ELMo** (2 layers), **BERT-base-cased** and **GPT-2** (12 layers each), plus each model's input layer as "layer 0". Input sentences came from the SemEval Semantic Textual Similarity tasks (2012 to 2016), and only words appearing in at least 5 distinct contexts were analysed.
+Ethayarajh studied hidden-layer representations (not just the input embedding table) of **ELMo** (2 layers), **BERT-base-cased** (12 layers) and **GPT-2** (12 layers), plus each model's input layer as "layer 0". Input sentences came from the SemEval Semantic Textual Similarity tasks (2012 to 2016), and only words appearing in at least 5 distinct contexts were analysed.
 
-**Finding 1: anisotropy is everywhere.** In all layers of all three models, average cosine between random words is clearly above 0 (the one exception is ELMo's input layer, since it generates character-level embeddings without using context). It is generally larger in higher layers. For GPT-2 it is roughly 0.6 in layers 2 to 8 and then climbs; in the last layer, two random words have an average cosine similarity that is almost 1. BERT also generally rises with depth, but with an exception: its penultimate layer is noticeably more anisotropic than its last. (Approximate values here are read off the paper's Figure 1.)
+::: {.callout-note}
+### Why include "layer 0"?
+Layer 0 is the raw input layer before any transformer attention or biLSTM recurrence mixes information across the sentence. Because layer 0 is not contextualized, it serves as a baseline for comparing how much contextualization each subsequent hidden layer actually adds.
+:::
 
-**Finding 2: upper layers are more context-specific.** Define, for a word $w$ occurring in $n$ contexts, its **self-similarity** in layer $\ell$:
+### Measuring contextuality
 
-$$
-\text{SelfSim}_\ell(w) = \frac{1}{n^2 - n} \sum_{j} \sum_{k \ne j} \cos\big(f_\ell(s_j, i_j),\, f_\ell(s_k, i_k)\big)
-$$
+To quantify how "contextual" a representation really is, the paper defines three metrics for a given layer $\ell$, where $f_\ell(s, i)$ maps the word at index $i$ in sentence $s$ to its vector in layer $\ell$:
 
-Here $f_\ell(s, i)$ is the layer-$\ell$ representation of the word at position $i$ in sentence $s$, so this is the average cosine between the word's vectors across different contexts. A value of 1 means no context-specificity. Because anisotropy inflates every cosine, the paper subtracts a **baseline** (the average cosine of random words in that layer):
+**1. Self-similarity ($\text{SelfSim}$).** Let a word $w$ appear in $n$ distinct sentences $\{s_1, \dots, s_n\}$ at indices $\{i_1, \dots, i_n\}$. Its self-similarity in layer $\ell$ is the average pairwise cosine similarity between its representations across those $n$ contexts:
 
-$$
-\text{SelfSim}^*_\ell(w) = \text{SelfSim}_\ell(w) - \text{Baseline}(f_\ell)
-$$
+$$\text{SelfSim}_\ell(w) = \frac{1}{n^2 - n} \sum_{j=1}^{n} \sum_{k \ne j} \cos\big(f_\ell(s_j, i_j),\, f_\ell(s_k, i_k)\big)$$
 
-After that adjustment, self-similarity drops as layers go up, so representations become more context-specific. Anisotropy and context-specificity grow together; the paper suggests anisotropy is inherent to, or at least a by-product of, contextualization.
+*Intuition:* If a layer does not contextualize $w$ at all, every occurrence gets the exact same vector and $\text{SelfSim}_\ell(w) = 1$. The more a layer bends $w$'s vector to fit each surrounding sentence, the further apart those occurrences drift, and the lower $\text{SelfSim}_\ell(w)$ drops.
 
-**Finding 3: context-specificity looks different per model.** Using intra-sentence similarity (how close the words in one sentence are to their mean vector), words in the same sentence grow more similar in higher ELMo layers, grow more dissimilar in BERT (while staying more similar than random words), and in GPT-2 are about as similar to each other as random words.
+**2. Intra-sentence similarity ($\text{IntraSim}$).** Let $s = \langle w_1, \dots, w_n \rangle$ be a single sentence of $n$ words, and let $\mathbf{s}_\ell = \frac{1}{n}\sum_{i=1}^{n} f_\ell(s, i)$ be the mean of all word vectors in that sentence. The intra-sentence similarity is the average cosine between each word in $s$ and the sentence mean:
 
-**Finding 4: a single static vector explains little.** The **maximum explainable variance** of a word is the fraction of variance in its contextualized vectors explained by their first principal component:
+$$\text{IntraSim}_\ell(s) = \frac{1}{n} \sum_{i=1}^{n} \cos\big(\mathbf{s}_\ell,\, f_\ell(s, i)\big)$$
 
-$$
-\text{MEV}_\ell(w) = \frac{\sigma_1^2}{\sum_i \sigma_i^2}
-$$
+*Intuition:* $\text{SelfSim}$ tells us *whether* a word's vector changes across sentences, while $\text{IntraSim}$ tells us *how* that change shows up in space. If $\text{SelfSim}$ is low but $\text{IntraSim}$ is high, the model contextualizes crudely by pulling all words in the same sentence toward a shared sentence vector. If both $\text{SelfSim}$ and $\text{IntraSim}$ are low, every word gets a context-specific vector that still remains distinct from the other words in the same sentence.
 
-where $\sigma_1 \ge \sigma_2 \ge \dots$ are the singular values of the matrix whose rows are the word's vectors across contexts. It is the best case for replacing all of a word's contextual vectors with one fixed vector. After subtracting the anisotropy baseline, on average less than 5% of the variance is explained in any layer of any model. Even so, the first principal component of a word's vectors from the lower layers makes a static embedding that beats GloVe and FastText on many word-similarity benchmarks.
+**3. Maximum explainable variance ($\text{MEV}$).** Stack a word $w$'s representations across its $n$ contexts as rows of an occurrence matrix $\mathbf{X}_w = [f_\ell(s_1, i_1); \dots; f_\ell(s_n, i_n)]$, and let $\sigma_1 \ge \sigma_2 \ge \dots \ge \sigma_m$ be its singular values. The maximum explainable variance is the fraction of total variance captured by the first principal component:
 
-The paper leaves open whether making contextual representations more isotropic (for example with a penalty added to the training objective) would help.
+$$\text{MEV}_\ell(w) = \frac{\sigma_1^2}{\sum_{i} \sigma_i^2}$$
+
+*(For the step-by-step proof of why this ratio of squared singular values equals the maximum variance along a single 1D axis, see the [MEV and SVD derivation page](mev-derivation.qmd).)*
+
+*Intuition:* $\text{MEV}$ puts an upper bound on how well a single static vector could approximate all of $w$'s contextualized vectors. If $\text{MEV}_\ell(w) = 1$, all occurrences of $w$ lie along a single line and one static embedding can replace them without loss. The closer $\text{MEV}_\ell(w)$ is to 0, the more spread out $w$'s representations are across directions, and the worse any static replacement will be.
+
+### Adjusting for anisotropy
+
+Raw similarity scores can be misleading when the underlying space is anisotropic. Suppose a layer is squeezed into such a narrow cone that *any* two random words have an average cosine similarity of $0.99$. In that layer, observing $\text{SelfSim}_\ell(w) = 0.95$ does not mean $w$ is poorly contextualized, it means different occurrences of $w$ are actually *less* similar to each other than two completely unrelated words picked at random.
+
+To separate true contextualization from the background geometry of the cone, Ethayarajh computes a layer-specific **anisotropic baseline** (estimated over 1,000 uniformly randomly sampled word occurrences $\mathcal{O}$) and subtracts it from each raw metric:
+
+- For $\text{SelfSim}$ and $\text{IntraSim}$, the baseline is the expected cosine similarity between two randomly sampled words from different contexts in layer $\ell$:
+
+$$\text{Baseline}_{\text{cos}}(f_\ell) = \mathbb{E}_{x, y \sim \mathcal{U}(\mathcal{O})}\big[\cos(f_\ell(x), f_\ell(y))\big]$$
+
+$$\text{SelfSim}^*_\ell(w) = \text{SelfSim}_\ell(w) - \text{Baseline}_{\text{cos}}(f_\ell)$$
+$$\text{IntraSim}^*_\ell(s) = \text{IntraSim}_\ell(s) - \text{Baseline}_{\text{cos}}(f_\ell)$$
+
+- For $\text{MEV}$, the baseline is the proportion of variance explained by the first principal component of a matrix of uniformly randomly sampled word occurrences in layer $\ell$ (with singular values $\tilde{\sigma}_1 \ge \tilde{\sigma}_2 \ge \dots$). When a layer sits in a narrow cone, a single direction already explains a large share of variance even for random words:
+
+$$\text{Baseline}_{\text{MEV}}(f_\ell) = \frac{\tilde{\sigma}_1^2}{\sum_i \tilde{\sigma}_i^2}$$
+$$\text{MEV}^*_\ell(w) = \text{MEV}_\ell(w) - \text{Baseline}_{\text{MEV}}(f_\ell)$$
+
+### The findings
+
+Using the anisotropy-adjusted metrics ($\text{SelfSim}^*$, $\text{IntraSim}^*$, and $\text{MEV}^*$) across all layers of ELMo, BERT, and GPT-2:
+
+**Finding 1: anisotropy is everywhere.** In all hidden layers of all three models, $\text{Baseline}_{\text{cos}}(f_\ell)$ is clearly above 0 (the sole exception is ELMo's layer 0, which builds character-level vectors without context or position). Anisotropy generally increases with depth. In GPT-2 it sits around 0.6 in layers 2 to 8 and then climbs steeply; in the final layer, two random words have an average cosine similarity near 1. BERT also rises with depth, though its penultimate layer (layer 11) is noticeably more anisotropic than its final layer. Because hidden layers are almost always more anisotropic than layer 0, the paper suggests anisotropy is a by-product of contextualization itself.
+
+**Finding 2: upper layers are more context-specific (especially for stopwords).** Adjusted self-similarity ($\text{SelfSim}^*$) drops steadily as layer depth increases across all three models, meaning upper layers produce representations that are much more specific to their context (with GPT-2's final layer reaching near-zero $\text{SelfSim}^*$). Surprisingly, **stopwords** such as *the*, *of*, and *to* have the lowest self-similarity of all words, even though they are not polysemous. This rules out the idea that models merely assign each word one of a finite number of dictionary "sense" vectors; instead, the sheer variety of contexts a word appears in drives the variation in its representations.
+
+**Finding 3: context-specificity manifests differently per model.** Adjusted intra-sentence similarity ($\text{IntraSim}^*$) diverges sharply across architectures:
+
+- **ELMo:** $\text{IntraSim}^*$ rises in higher layers, meaning words in the same sentence are pulled closer together in vector space as they incorporate shared sentence context.
+- **BERT:** $\text{IntraSim}^*$ generally drifts downward in upper layers (words in a sentence grow more distinct from each other), but stays positive ($\approx 0.20\text{–}0.35$), meaning words in the same sentence remain closer than random words.
+- **GPT-2:** $\text{IntraSim}^*$ is close to 0 across almost all hidden layers. Words in the same sentence are no more similar to each other than two random words from different sentences, showing that high contextualization does not require sentence words to converge toward a shared mean.
+
+**Finding 4: a single static vector explains less than 5% of variance.** Across all layers of ELMo, BERT, and GPT-2, average adjusted maximum explainable variance ($\text{MEV}^*$) is below 5% (and for many words, raw $\text{MEV}$ is smaller than the random-word baseline). Even in the best theoretical case, a static vector cannot approximate a word's contextual representations. Still, if you extract static word embeddings by taking the first principal component of each word's representations in the *lower* layers (especially BERT layer 1), they outperform GloVe and FastText on most traditional word-similarity and analogy benchmarks.
+
+The paper leaves open whether making contextual representations more isotropic (for example with a penalty added to the training objective) would help
 
 ## Why a cone hurts similarity search
 
