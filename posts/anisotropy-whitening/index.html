@@ -197,7 +197,12 @@ window.Quarto = {
   <li><a href="#why-non-orthonormal-axes-break-the-formula" id="toc-why-non-orthonormal-axes-break-the-formula" class="nav-link" data-scroll-target="#why-non-orthonormal-axes-break-the-formula">Why non-orthonormal axes break the formula</a></li>
   </ul></li>
   <li><a href="#isotropic-vs-anisotropic" id="toc-isotropic-vs-anisotropic" class="nav-link" data-scroll-target="#isotropic-vs-anisotropic">Isotropic vs anisotropic</a></li>
-  <li><a href="#what-the-evidence-says-ethayarajh-2019" id="toc-what-the-evidence-says-ethayarajh-2019" class="nav-link" data-scroll-target="#what-the-evidence-says-ethayarajh-2019">What the evidence says: Ethayarajh (2019)</a></li>
+  <li><a href="#what-the-evidence-says-ethayarajh-2019" id="toc-what-the-evidence-says-ethayarajh-2019" class="nav-link" data-scroll-target="#what-the-evidence-says-ethayarajh-2019">What the evidence says: Ethayarajh (2019)</a>
+  <ul class="collapse">
+  <li><a href="#measuring-contextuality" id="toc-measuring-contextuality" class="nav-link" data-scroll-target="#measuring-contextuality">Measuring contextuality</a></li>
+  <li><a href="#adjusting-for-anisotropy" id="toc-adjusting-for-anisotropy" class="nav-link" data-scroll-target="#adjusting-for-anisotropy">Adjusting for anisotropy</a></li>
+  <li><a href="#the-findings" id="toc-the-findings" class="nav-link" data-scroll-target="#the-findings">The findings</a></li>
+  </ul></li>
   <li><a href="#why-a-cone-hurts-similarity-search" id="toc-why-a-cone-hurts-similarity-search" class="nav-link" data-scroll-target="#why-a-cone-hurts-similarity-search">Why a cone hurts similarity search</a></li>
   <li><a href="#whitening" id="toc-whitening" class="nav-link" data-scroll-target="#whitening">Whitening</a>
   <ul class="collapse">
@@ -293,24 +298,62 @@ window.Quarto = {
 </section>
 <section id="what-the-evidence-says-ethayarajh-2019" class="level2">
 <h2 class="anchored" data-anchor-id="what-the-evidence-says-ethayarajh-2019">What the evidence says: Ethayarajh (2019)</h2>
-<p>Ethayarajh studied hidden-layer representations (not just the input embedding table) of <strong>ELMo</strong> (2 layers), <strong>BERT-base-cased</strong> and <strong>GPT-2</strong> (12 layers each), plus each model’s input layer as “layer 0”. Input sentences came from the SemEval Semantic Textual Similarity tasks (2012 to 2016), and only words appearing in at least 5 distinct contexts were analysed.</p>
-<p><strong>Finding 1: anisotropy is everywhere.</strong> In all layers of all three models, average cosine between random words is clearly above 0 (the one exception is ELMo’s input layer, since it generates character-level embeddings without using context). It is generally larger in higher layers. For GPT-2 it is roughly 0.6 in layers 2 to 8 and then climbs; in the last layer, two random words have an average cosine similarity that is almost 1. BERT also generally rises with depth, but with an exception: its penultimate layer is noticeably more anisotropic than its last. (Approximate values here are read off the paper’s Figure 1.)</p>
-<p><strong>Finding 2: upper layers are more context-specific.</strong> Define, for a word <span class="math inline">\(w\)</span> occurring in <span class="math inline">\(n\)</span> contexts, its <strong>self-similarity</strong> in layer <span class="math inline">\(\ell\)</span>:</p>
-<p><span class="math display">\[
-\text{SelfSim}_\ell(w) = \frac{1}{n^2 - n} \sum_{j} \sum_{k \ne j} \cos\big(f_\ell(s_j, i_j),\, f_\ell(s_k, i_k)\big)
-\]</span></p>
-<p>Here <span class="math inline">\(f_\ell(s, i)\)</span> is the layer-<span class="math inline">\(\ell\)</span> representation of the word at position <span class="math inline">\(i\)</span> in sentence <span class="math inline">\(s\)</span>, so this is the average cosine between the word’s vectors across different contexts. A value of 1 means no context-specificity. Because anisotropy inflates every cosine, the paper subtracts a <strong>baseline</strong> (the average cosine of random words in that layer):</p>
-<p><span class="math display">\[
-\text{SelfSim}^*_\ell(w) = \text{SelfSim}_\ell(w) - \text{Baseline}(f_\ell)
-\]</span></p>
-<p>After that adjustment, self-similarity drops as layers go up, so representations become more context-specific. Anisotropy and context-specificity grow together; the paper suggests anisotropy is inherent to, or at least a by-product of, contextualization.</p>
-<p><strong>Finding 3: context-specificity looks different per model.</strong> Using intra-sentence similarity (how close the words in one sentence are to their mean vector), words in the same sentence grow more similar in higher ELMo layers, grow more dissimilar in BERT (while staying more similar than random words), and in GPT-2 are about as similar to each other as random words.</p>
-<p><strong>Finding 4: a single static vector explains little.</strong> The <strong>maximum explainable variance</strong> of a word is the fraction of variance in its contextualized vectors explained by their first principal component:</p>
-<p><span class="math display">\[
-\text{MEV}_\ell(w) = \frac{\sigma_1^2}{\sum_i \sigma_i^2}
-\]</span></p>
-<p>where <span class="math inline">\(\sigma_1 \ge \sigma_2 \ge \dots\)</span> are the singular values of the matrix whose rows are the word’s vectors across contexts. It is the best case for replacing all of a word’s contextual vectors with one fixed vector. After subtracting the anisotropy baseline, on average less than 5% of the variance is explained in any layer of any model. Even so, the first principal component of a word’s vectors from the lower layers makes a static embedding that beats GloVe and FastText on many word-similarity benchmarks.</p>
-<p>The paper leaves open whether making contextual representations more isotropic (for example with a penalty added to the training objective) would help.</p>
+<p>Ethayarajh studied hidden-layer representations (not just the input embedding table) of <strong>ELMo</strong> (2 layers), <strong>BERT-base-cased</strong> (12 layers) and <strong>GPT-2</strong> (12 layers), plus each model’s input layer as “layer 0”. Input sentences came from the SemEval Semantic Textual Similarity tasks (2012 to 2016), and only words appearing in at least 5 distinct contexts were analysed.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>Why include “layer 0”?
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>Layer 0 is the raw input layer before any transformer attention or biLSTM recurrence mixes information across the sentence. Because layer 0 is not contextualized, it serves as a baseline for comparing how much contextualization each subsequent hidden layer actually adds.</p>
+</div>
+</div>
+<section id="measuring-contextuality" class="level3">
+<h3 class="anchored" data-anchor-id="measuring-contextuality">Measuring contextuality</h3>
+<p>To quantify how “contextual” a representation really is, the paper defines three metrics for a given layer <span class="math inline">\(\ell\)</span>, where <span class="math inline">\(f_\ell(s, i)\)</span> maps the word at index <span class="math inline">\(i\)</span> in sentence <span class="math inline">\(s\)</span> to its vector in layer <span class="math inline">\(\ell\)</span>:</p>
+<p><strong>1. Self-similarity (<span class="math inline">\(\text{SelfSim}\)</span>).</strong> Let a word <span class="math inline">\(w\)</span> appear in <span class="math inline">\(n\)</span> distinct sentences <span class="math inline">\(\{s_1, \dots, s_n\}\)</span> at indices <span class="math inline">\(\{i_1, \dots, i_n\}\)</span>. Its self-similarity in layer <span class="math inline">\(\ell\)</span> is the average pairwise cosine similarity between its representations across those <span class="math inline">\(n\)</span> contexts:</p>
+<p><span class="math display">\[\text{SelfSim}_\ell(w) = \frac{1}{n^2 - n} \sum_{j=1}^{n} \sum_{k \ne j} \cos\big(f_\ell(s_j, i_j),\, f_\ell(s_k, i_k)\big)\]</span></p>
+<p><em>Intuition:</em> If a layer does not contextualize <span class="math inline">\(w\)</span> at all, every occurrence gets the exact same vector and <span class="math inline">\(\text{SelfSim}_\ell(w) = 1\)</span>. The more a layer bends <span class="math inline">\(w\)</span>’s vector to fit each surrounding sentence, the further apart those occurrences drift, and the lower <span class="math inline">\(\text{SelfSim}_\ell(w)\)</span> drops.</p>
+<p><strong>2. Intra-sentence similarity (<span class="math inline">\(\text{IntraSim}\)</span>).</strong> Let <span class="math inline">\(s = \langle w_1, \dots, w_n \rangle\)</span> be a single sentence of <span class="math inline">\(n\)</span> words, and let <span class="math inline">\(\mathbf{s}_\ell = \frac{1}{n}\sum_{i=1}^{n} f_\ell(s, i)\)</span> be the mean of all word vectors in that sentence. The intra-sentence similarity is the average cosine between each word in <span class="math inline">\(s\)</span> and the sentence mean:</p>
+<p><span class="math display">\[\text{IntraSim}_\ell(s) = \frac{1}{n} \sum_{i=1}^{n} \cos\big(\mathbf{s}_\ell,\, f_\ell(s, i)\big)\]</span></p>
+<p><em>Intuition:</em> <span class="math inline">\(\text{SelfSim}\)</span> tells us <em>whether</em> a word’s vector changes across sentences, while <span class="math inline">\(\text{IntraSim}\)</span> tells us <em>how</em> that change shows up in space. If <span class="math inline">\(\text{SelfSim}\)</span> is low but <span class="math inline">\(\text{IntraSim}\)</span> is high, the model contextualizes crudely by pulling all words in the same sentence toward a shared sentence vector. If both <span class="math inline">\(\text{SelfSim}\)</span> and <span class="math inline">\(\text{IntraSim}\)</span> are low, every word gets a context-specific vector that still remains distinct from the other words in the same sentence.</p>
+<p><strong>3. Maximum explainable variance (<span class="math inline">\(\text{MEV}\)</span>).</strong> Stack a word <span class="math inline">\(w\)</span>’s representations across its <span class="math inline">\(n\)</span> contexts as rows of an occurrence matrix <span class="math inline">\(\mathbf{X}_w = [f_\ell(s_1, i_1); \dots; f_\ell(s_n, i_n)]\)</span>, and let <span class="math inline">\(\sigma_1 \ge \sigma_2 \ge \dots \ge \sigma_m\)</span> be its singular values. The maximum explainable variance is the fraction of total variance captured by the first principal component:</p>
+<p><span class="math display">\[\text{MEV}_\ell(w) = \frac{\sigma_1^2}{\sum_{i} \sigma_i^2}\]</span></p>
+<p><em>(For the step-by-step proof of why this ratio of squared singular values equals the maximum variance along a single 1D axis, see the <a href="../../posts/anisotropy-whitening/mev-derivation.html">MEV and SVD derivation page</a>.)</em></p>
+<p><em>Intuition:</em> <span class="math inline">\(\text{MEV}\)</span> puts an upper bound on how well a single static vector could approximate all of <span class="math inline">\(w\)</span>’s contextualized vectors. If <span class="math inline">\(\text{MEV}_\ell(w) = 1\)</span>, all occurrences of <span class="math inline">\(w\)</span> lie along a single line and one static embedding can replace them without loss. The closer <span class="math inline">\(\text{MEV}_\ell(w)\)</span> is to 0, the more spread out <span class="math inline">\(w\)</span>’s representations are across directions, and the worse any static replacement will be.</p>
+</section>
+<section id="adjusting-for-anisotropy" class="level3">
+<h3 class="anchored" data-anchor-id="adjusting-for-anisotropy">Adjusting for anisotropy</h3>
+<p>Raw similarity scores can be misleading when the underlying space is anisotropic. Suppose a layer is squeezed into such a narrow cone that <em>any</em> two random words have an average cosine similarity of <span class="math inline">\(0.99\)</span>. In that layer, observing <span class="math inline">\(\text{SelfSim}_\ell(w) = 0.95\)</span> does not mean <span class="math inline">\(w\)</span> is poorly contextualized, it means different occurrences of <span class="math inline">\(w\)</span> are actually <em>less</em> similar to each other than two completely unrelated words picked at random.</p>
+<p>To separate true contextualization from the background geometry of the cone, Ethayarajh computes a layer-specific <strong>anisotropic baseline</strong> (estimated over 1,000 uniformly randomly sampled word occurrences <span class="math inline">\(\mathcal{O}\)</span>) and subtracts it from each raw metric:</p>
+<ul>
+<li>For <span class="math inline">\(\text{SelfSim}\)</span> and <span class="math inline">\(\text{IntraSim}\)</span>, the baseline is the expected cosine similarity between two randomly sampled words from different contexts in layer <span class="math inline">\(\ell\)</span>:</li>
+</ul>
+<p><span class="math display">\[\text{Baseline}_{\text{cos}}(f_\ell) = \mathbb{E}_{x, y \sim \mathcal{U}(\mathcal{O})}\big[\cos(f_\ell(x), f_\ell(y))\big]\]</span></p>
+<p><span class="math display">\[\text{SelfSim}^*_\ell(w) = \text{SelfSim}_\ell(w) - \text{Baseline}_{\text{cos}}(f_\ell)\]</span> <span class="math display">\[\text{IntraSim}^*_\ell(s) = \text{IntraSim}_\ell(s) - \text{Baseline}_{\text{cos}}(f_\ell)\]</span></p>
+<ul>
+<li>For <span class="math inline">\(\text{MEV}\)</span>, the baseline is the proportion of variance explained by the first principal component of a matrix of uniformly randomly sampled word occurrences in layer <span class="math inline">\(\ell\)</span> (with singular values <span class="math inline">\(\tilde{\sigma}_1 \ge \tilde{\sigma}_2 \ge \dots\)</span>). When a layer sits in a narrow cone, a single direction already explains a large share of variance even for random words:</li>
+</ul>
+<p><span class="math display">\[\text{Baseline}_{\text{MEV}}(f_\ell) = \frac{\tilde{\sigma}_1^2}{\sum_i \tilde{\sigma}_i^2}\]</span> <span class="math display">\[\text{MEV}^*_\ell(w) = \text{MEV}_\ell(w) - \text{Baseline}_{\text{MEV}}(f_\ell)\]</span></p>
+</section>
+<section id="the-findings" class="level3">
+<h3 class="anchored" data-anchor-id="the-findings">The findings</h3>
+<p>Using the anisotropy-adjusted metrics (<span class="math inline">\(\text{SelfSim}^*\)</span>, <span class="math inline">\(\text{IntraSim}^*\)</span>, and <span class="math inline">\(\text{MEV}^*\)</span>) across all layers of ELMo, BERT, and GPT-2:</p>
+<p><strong>Finding 1: anisotropy is everywhere.</strong> In all hidden layers of all three models, <span class="math inline">\(\text{Baseline}_{\text{cos}}(f_\ell)\)</span> is clearly above 0 (the sole exception is ELMo’s layer 0, which builds character-level vectors without context or position). Anisotropy generally increases with depth. In GPT-2 it sits around 0.6 in layers 2 to 8 and then climbs steeply; in the final layer, two random words have an average cosine similarity near 1. BERT also rises with depth, though its penultimate layer (layer 11) is noticeably more anisotropic than its final layer. Because hidden layers are almost always more anisotropic than layer 0, the paper suggests anisotropy is a by-product of contextualization itself.</p>
+<p><strong>Finding 2: upper layers are more context-specific (especially for stopwords).</strong> Adjusted self-similarity (<span class="math inline">\(\text{SelfSim}^*\)</span>) drops steadily as layer depth increases across all three models, meaning upper layers produce representations that are much more specific to their context (with GPT-2’s final layer reaching near-zero <span class="math inline">\(\text{SelfSim}^*\)</span>). Surprisingly, <strong>stopwords</strong> such as <em>the</em>, <em>of</em>, and <em>to</em> have the lowest self-similarity of all words, even though they are not polysemous. This rules out the idea that models merely assign each word one of a finite number of dictionary “sense” vectors; instead, the sheer variety of contexts a word appears in drives the variation in its representations.</p>
+<p><strong>Finding 3: context-specificity manifests differently per model.</strong> Adjusted intra-sentence similarity (<span class="math inline">\(\text{IntraSim}^*\)</span>) diverges sharply across architectures:</p>
+<ul>
+<li><strong>ELMo:</strong> <span class="math inline">\(\text{IntraSim}^*\)</span> rises in higher layers, meaning words in the same sentence are pulled closer together in vector space as they incorporate shared sentence context.</li>
+<li><strong>BERT:</strong> <span class="math inline">\(\text{IntraSim}^*\)</span> generally drifts downward in upper layers (words in a sentence grow more distinct from each other), but stays positive (<span class="math inline">\(\approx 0.20\text{–}0.35\)</span>), meaning words in the same sentence remain closer than random words.</li>
+<li><strong>GPT-2:</strong> <span class="math inline">\(\text{IntraSim}^*\)</span> is close to 0 across almost all hidden layers. Words in the same sentence are no more similar to each other than two random words from different sentences, showing that high contextualization does not require sentence words to converge toward a shared mean.</li>
+</ul>
+<p><strong>Finding 4: a single static vector explains less than 5% of variance.</strong> Across all layers of ELMo, BERT, and GPT-2, average adjusted maximum explainable variance (<span class="math inline">\(\text{MEV}^*\)</span>) is below 5% (and for many words, raw <span class="math inline">\(\text{MEV}\)</span> is smaller than the random-word baseline). Even in the best theoretical case, a static vector cannot approximate a word’s contextual representations. Still, if you extract static word embeddings by taking the first principal component of each word’s representations in the <em>lower</em> layers (especially BERT layer 1), they outperform GloVe and FastText on most traditional word-similarity and analogy benchmarks.</p>
+<p>The paper leaves open whether making contextual representations more isotropic (for example with a penalty added to the training objective) would help</p>
+</section>
 </section>
 <section id="why-a-cone-hurts-similarity-search" class="level2">
 <h2 class="anchored" data-anchor-id="why-a-cone-hurts-similarity-search">Why a cone hurts similarity search</h2>

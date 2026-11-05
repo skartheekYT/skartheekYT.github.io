@@ -245,7 +245,7 @@ window.Quarto = {
 </header>
 
 
-<p>A transformer cannot read text, and it cannot do much with integers either. Before any attention happens, every token ID has to become a vector of real numbers. This article covers that first step: what the <strong>embedding layer</strong> is, where its numbers come from, and why the <em>shape</em> of the resulting vector space matters for things like retrieval.</p>
+<p>A transformer cannot read text, and it can’t do much with integers either. Before any attention happens, every token ID must be converted into a vector of real numbers that capture its underlying meaning. This article covers that first step: what the <strong>embedding layer</strong> is, where its numbers come from, and why the <em>shape</em> of the resulting vector space matters for things like retrieval.</p>
 <p>This is the follow-up to the <a href="../../posts/tokenization-bpe/index.html">tokenization article</a>, which ended at the point where text has become a sequence of integer token IDs.</p>
 <section id="why-ids-are-not-enough" class="level2">
 <h2 class="anchored" data-anchor-id="why-ids-are-not-enough">Why IDs are not enough</h2>
@@ -253,7 +253,7 @@ window.Quarto = {
 <p>The classic fix is <strong>one-hot encoding</strong>: for a vocabulary of size <span class="math inline">\(|V|\)</span>, token <span class="math inline">\(i\)</span> becomes a vector of length <span class="math inline">\(|V|\)</span> with a 1 at position <span class="math inline">\(i\)</span> and 0 everywhere else. That removes the fake ordering, but it has two problems:</p>
 <ul>
 <li>It is huge and almost entirely zeros (for <span class="math inline">\(|V| = 128{,}000\)</span>, one token is a 128,000-dimensional vector).</li>
-<li>Every pair of distinct tokens is exactly equally far apart. “king” is no closer to “queen” than to “bicycle”, so the encoding carries no notion of similarity.</li>
+<li>Every pair of distinct tokens is exactly equally far apart (there is no geometry). “king” is no closer to “queen” than to “bicycle”, so the encoding carries no notion of similarity.</li>
 </ul>
 <p>An <strong>embedding</strong> replaces this with a short, dense, <em>learned</em> vector, typically a few thousand numbers, where similarity can be expressed by geometry.</p>
 </section>
@@ -304,7 +304,7 @@ window.Quarto = {
 <p><span class="math display">\[
 128{,}256 \times 4{,}096 \approx 525\text{M parameters},
 \]</span></p>
-<p>roughly 6.5% of an ~8B-parameter model. The embedding table is a non-trivial slice of the model, and it grows linearly with the vocabulary, which is one reason vocabulary size is a design decision (see the tokenization article).</p>
+<p>roughly 6.5% of an ~8B-parameter model. The embedding table is a non-trivial slice of the model, and it grows linearly with the vocabulary, which is one reason vocabulary size is a design decision.</p>
 </section>
 </section>
 <section id="where-do-the-vectors-come-from" class="level2">
@@ -320,7 +320,7 @@ window.Quarto = {
 \mathbf{W}_{\text{head}} = \mathbf{E}^\top
 \]</span></p>
 <p>So the logits (the raw scores before softmax) for a final hidden vector <span class="math inline">\(\mathbf{h}\)</span> are <span class="math inline">\(\mathbf{h}\,\mathbf{E}^\top\)</span>: the model scores each token by how well <span class="math inline">\(\mathbf{h}\)</span> lines up with that token’s embedding. Tying saves <span class="math inline">\(|V| \times d\)</span> parameters and ties the “reading” and “writing” vocabularies together. Not every model does it (GPT-2 does; plenty of large models keep separate input and output matrices).</p>
-<p>One consequence: with tying, <em>every</em> row of <span class="math inline">\(\mathbf{E}\)</span> gets gradient from the output softmax, so the sparse-update picture above only describes the input lookup.</p>
+<p>One consequence: with tying, <em>every</em> row of <span class="math inline">\(\mathbf{E}\)</span> gets gradient updates from the output softmax as well, so the sparse-update picture above only describes the input lookup.</p>
 </section>
 <section id="measuring-closeness-cosine-similarity" class="level2">
 <h2 class="anchored" data-anchor-id="measuring-closeness-cosine-similarity">Measuring closeness: cosine similarity</h2>
@@ -338,14 +338,14 @@ window.Quarto = {
 </section>
 <section id="a-geometry-problem-anisotropy" class="level2">
 <h2 class="anchored" data-anchor-id="a-geometry-problem-anisotropy">A geometry problem: anisotropy</h2>
-<p>Here is the catch for anyone who wants to use these vectors for similarity search, clustering or recommendation. If vectors were spread evenly over all directions (<strong>isotropic</strong>), two totally unrelated vectors would have cosine similarity about 0. Ethayarajh found that in practice, contextualized representations are <strong>anisotropic</strong>: they sit in a <strong>narrow cone</strong>, so random pairs already have a high cosine similarity. The anisotropy in GPT-2’s final layer is so extreme that any two random words have an almost perfect cosine similarity on average.</p>
+<p>There is a significant structural challenge in using these vectors for similarity search, clustering, or recommendation. If vectors were spread evenly over all directions (<strong>isotropic</strong>), two totally unrelated vectors would have cosine similarity about 0. Ethayarajh found that in practice, contextualized representations are <strong>anisotropic</strong>: they sit in a <strong>narrow cone</strong>, so random pairs already have a high cosine similarity. The anisotropy in GPT-2’s final layer is so extreme that any two random words have an almost perfect cosine similarity on average.</p>
 <div class="cell" data-layout-align="default">
 <div class="cell-output-display">
 <div>
 <p></p><figure class="figure"><p></p>
 <div>
 <pre class="mermaid mermaid-js">flowchart LR
-    A["&lt;b&gt;Anisotropic&lt;/b&gt;&lt;hr/&gt;&lt;small&gt;• vectors in a narrow cone&lt;br/&gt;• random pair: cos ≈ 1&lt;/small&gt;"] -- "whitening" --&gt; B["&lt;b&gt;Isotropic&lt;/b&gt;&lt;hr/&gt;&lt;small&gt;• directions spread evenly&lt;br/&gt;• random pair: cos ≈ 0&lt;/small&gt;"]
+    A["&lt;b&gt;Anisotropic&lt;/b&gt;&lt;br/&gt;&lt;small&gt;• vectors in a narrow cone&lt;br/&gt;• random pair: cos ≈ 1&lt;/small&gt;"] -- "whitening" --&gt; B["&lt;b&gt;Isotropic&lt;/b&gt;&lt;br/&gt;&lt;small&gt;• directions spread evenly&lt;br/&gt;• random pair: cos ≈ 0&lt;/small&gt;"]
 </pre>
 </div>
 <p></p></figure><p></p>

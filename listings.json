@@ -4,6 +4,7 @@
     "items": [
       "/posts/anisotropy-whitening/index.html",
       "/posts/anisotropy-whitening/derivation.html",
+      "/posts/anisotropy-whitening/mev-derivation.html",
       "/posts/embeddings-token-vectors/index.html",
       "/posts/tokenization-bpe/index.html",
       "/posts/tokenization-bpe/wordpiece-likelihood-proof.html"
