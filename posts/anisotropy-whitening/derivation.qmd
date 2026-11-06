@@ -1,6 +1,6 @@
 ---
 title: "Companion: Deriving the Whitening Matrix"
-description: "Step-by-step derivation of W = U Λ^(-1/2), the Whitening-k truncation, and exact streaming updates for the mean and covariance."
+description: "Step-by-step derivation of the Whitening Matrix (W), the Whitening-k truncation, and exact streaming updates for the mean and covariance."
 date: "2026-11-01"
 draft: false
 categories: [llm, embeddings, math]
@@ -17,15 +17,9 @@ $$
 \boldsymbol{\Sigma} = \frac{1}{N}\sum_{i=1}^{N}(\mathbf{x}_i-\boldsymbol{\mu})^\top(\mathbf{x}_i-\boldsymbol{\mu}) \in \mathbb{R}^{d\times d}.
 $$
 
-Each term $(\mathbf{x}_i-\boldsymbol{\mu})^\top(\mathbf{x}_i-\boldsymbol{\mu})$ is a $d\times d$ outer product (a column times a row). $\boldsymbol{\Sigma}$ is symmetric and positive semi-definite; we assume it is positive definite (all eigenvalues $>0$, which needs enough data and no perfectly redundant coordinates).
+$\boldsymbol{\Sigma}$ is symmetric and positive semi-definite; we assume it is positive definite (all eigenvalues $>0$, which needs enough data and no perfectly redundant coordinates).
 
-We look for a $d\times d$ matrix $\mathbf{W}$ such that
-
-$$
-\tilde{\mathbf{x}}_i = (\mathbf{x}_i-\boldsymbol{\mu})\,\mathbf{W}
-$$
-
-has mean $\mathbf{0}$ and covariance $\mathbf{I}$.
+We look for a $d\times d$ matrix $\mathbf{W}$ such that $\tilde{\mathbf{x}}_i = (\mathbf{x}_i-\boldsymbol{\mu})\,\mathbf{W}$ has mean $\mathbf{0}$ and covariance $\mathbf{I}$.
 
 ## Step 1: mean and covariance of the transformed data
 
@@ -71,7 +65,7 @@ It uses $\boldsymbol{\Lambda}^{-1/2}$ being diagonal (so equal to its own transp
 
 In column-vector notation, a vector $\mathbf{h}$ is whitened as $\tilde{\mathbf{h}}=\boldsymbol{\Lambda}^{-1/2}\mathbf{U}^\top(\mathbf{h}-\boldsymbol{\mu})$, which is the transpose of $(\mathbf{x}-\boldsymbol{\mu})\mathbf{W}$.
 
-## The solution is not unique
+### The solution is not unique
 
 If $\mathbf{R}$ is any orthogonal matrix, then $\mathbf{W}'=\mathbf{W}\mathbf{R}$ also satisfies equation (1), since $\mathbf{R}^\top\mathbf{I}\mathbf{R}=\mathbf{I}$. Different choices of $\mathbf{R}$ give different "whitenings" with the same covariance. Choosing $\mathbf{R}=\mathbf{I}$ gives $\mathbf{W}=\mathbf{U}\boldsymbol{\Lambda}^{-1/2}$ (often called PCA whitening); choosing $\mathbf{R}=\mathbf{U}^\top$ gives $\mathbf{U}\boldsymbol{\Lambda}^{-1/2}\mathbf{U}^\top$ (ZCA whitening), which stays as close as possible to the original coordinates. Because a rotation does not change any cosine similarity *between whitened vectors*, both choices give the same pairwise cosines.
 
@@ -105,11 +99,52 @@ $$
 \boldsymbol{\Sigma}_{n+1} = \frac{n}{n+1}\boldsymbol{\Sigma}_n + \frac{n}{(n+1)^2}(\mathbf{x}_{n+1}-\boldsymbol{\mu}_n)^\top(\mathbf{x}_{n+1}-\boldsymbol{\mu}_n).
 $$
 
-We checked this numerically against the batch covariance (agreement to about $10^{-15}$). Memory is $O(d^2)$ regardless of $N$, and time is $O(d^2)$ per vector.
+Memory is $O(d^2)$ regardless of $N$, and time is $O(d^2)$ per vector.
 
 ## Why this matters for cosine
 
-After whitening, $\boldsymbol{\mu}$ no longer contributes a shared offset to dot products, and each (kept) direction contributes equally to $\mathbf{x}\cdot\mathbf{y}$. That is the "isotropic, so the coordinate formula for cosine is trustworthy" argument of the main article, and also the reason full whitening can hurt: directions with tiny variance, often mostly noise, are given the same weight as the informative ones.
+After whitening, $\boldsymbol{\mu}$ no longer contributes a shared offset to dot products, and each (kept) direction contributes equally to $\mathbf{x}\cdot\mathbf{y}$. That is the "isotropic, so the coordinate formula for cosine is trustworthy" argument of the main article, and also the reason full whitening can hurt: directions with tiny variance, often mostly noise, are given the same weight as the informative ones (see the *Spectral Noise Amplification section* below).
+
+## Numerical Stability, Rank Deficiency, and Regularization
+
+While $\mathbf{W} = \mathbf{U}\boldsymbol{\Lambda}^{-1/2}$ is exact in theory, applying it blindly at full rank ($k = d$) introduces two practical failure modes: **noise amplification** in ill-conditioned directions and **singularity** when the sample size $N$ is small.
+
+### 1. Spectral Noise Amplification
+Writing $\mathbf{U} = [\mathbf{u}_1, \mathbf{u}_2, \dots, \mathbf{u}_d]$ in terms of its column eigenvectors shows how $\mathbf{W}$ acts on each principal axis independently:
+
+$$
+\mathbf{W} = \mathbf{U}\boldsymbol{\Lambda}^{-1/2} = \begin{bmatrix} \dfrac{\mathbf{u}_1}{\sqrt{\lambda_1}} & \dfrac{\mathbf{u}_2}{\sqrt{\lambda_2}} & \cdots & \dfrac{\mathbf{u}_d}{\sqrt{\lambda_d}} \end{bmatrix}
+$$
+
+For a centered embedding $\mathbf{x}_i - \boldsymbol{\mu}$, its $j$-th whitened coordinate is:
+
+$$
+\tilde{x}_{i,j} = \frac{(\mathbf{x}_i - \boldsymbol{\mu})\,\mathbf{u}_j}{\sqrt{\lambda_j}}
+$$
+
+In anisotropic transformer embedding spaces, the eigenvalue spectrum decays rapidly. The leading eigenvalues capture dominant semantic and structural variance, whereas the tail eigenvalues ($\lambda_j \to 0$) often reflect floating-point roundoff or quantization noise. If $\lambda_d = 10^{-8}$, dividing by $\sqrt{\lambda_d}$ multiplies projections along $\mathbf{u}_d$ by $10^4$. Full-rank whitening forces every axis to unit variance ($\lambda = 1$), giving a pure-noise tail direction the exact same weight in downstream cosine similarity as the top principal component.
+
+### 2. Rank Deficiency When $N \le d$
+Let $\mathbf{X}_c \in \mathbb{R}^{N \times d}$ denote the mean-centered embedding matrix with rows $\mathbf{x}_i - \boldsymbol{\mu}$, so that $\boldsymbol{\Sigma} = \frac{1}{N}\mathbf{X}_c^\top \mathbf{X}_c$. Because the rows of $\mathbf{X}_c$ sum to the zero vector, $\sum_{i=1}^{N}(\mathbf{x}_i - \boldsymbol{\mu}) = \mathbf{0}$, they are linearly dependent and span a subspace of dimension at most $N - 1$. Consequently:
+
+$$
+\operatorname{rank}(\boldsymbol{\Sigma}) = \operatorname{rank}(\mathbf{X}_c^\top \mathbf{X}_c) = \operatorname{rank}(\mathbf{X}_c) \le \min(N - 1, d)
+$$
+
+Whenever $N \le d$, $\boldsymbol{\Sigma}$ is rank-deficient (singular). At least $d - N + 1$ eigenvalues are identically zero ($\lambda_j = 0$, or $\approx 10^{-16}$ in finite precision), making $\boldsymbol{\Lambda}^{-1/2}$ undefined due to division by zero.
+
+### 3. Two Remedies: Truncation vs. Tikhonov Regularization
+To guarantee a well-conditioned transformation, we can either truncate the spectrum or regularize the diagonal:
+
+1. **Spectral Truncation (Whitening-$k$):** Keep only the top $k \le \operatorname{rank}(\boldsymbol{\Sigma})$ columns of $\mathbf{W}$ corresponding to signal-bearing eigenvalues, discarding the noisy or zero-variance tail:
+   $$
+   \mathbf{W}_k = \mathbf{U}_{:, :k}\,\boldsymbol{\Lambda}_{:k, :k}^{-1/2} \in \mathbb{R}^{d \times k}
+   $$
+2. **Tikhonov Regularization (Diagonal Loading):** Add a small damping constant $\epsilon > 0$ (typically $10^{-5}$ to $10^{-8}$) to the covariance diagonal before inversion, $\boldsymbol{\Sigma}_{\text{reg}} = \boldsymbol{\Sigma} + \epsilon\mathbf{I}$, which shifts all eigenvalues by $+\epsilon$:
+   $$
+   \mathbf{W}_{\text{reg}} = \mathbf{U}(\boldsymbol{\Lambda} + \epsilon\mathbf{I})^{-1/2}, \qquad \text{scaling axis } j \text{ by } \frac{1}{\sqrt{\lambda_j + \epsilon}}
+   $$
+   This bounds the maximum amplification factor at $1/\sqrt{\epsilon}$ and prevents division by zero even when $\lambda_j = 0$.
 
 ---
 

@@ -6,13 +6,13 @@ draft: false
 categories: [llm, embeddings, math]
 ---
 
-This page is a companion to [Anisotropy and Whitening](index.qmd). It derives from scratch why the **maximum explainable variance (MEV)** along a single axis equals the ratio of squared singular values $\sigma_1^2 / \sum_i \sigma_i^2$, and shows how singular values connect to the eigenvalues of $\mathbf{X}^\top \mathbf{X}$. Nothing is skipped—even the proportionality between covariance and $\mathbf{X}^\top \mathbf{X}$ is written out entry by entry.
+This page is a companion to [Anisotropy and Whitening](index.qmd). It derives from scratch why the **maximum explainable variance (MEV)** along a single axis equals the ratio of squared singular values $\sigma_1^2 / \sum_i \sigma_i^2$, and shows how singular values connect to the eigenvalues of $\mathbf{X}^\top \mathbf{X}$.
 
 *(Note on notation: in the main article and [whitening derivation](derivation.qmd), $\boldsymbol{\Sigma}$ denotes the covariance matrix. Here we follow the standard SVD convention where $\boldsymbol{\Sigma}$ is the rectangular diagonal matrix of singular values $\sigma_i$, and we write $\mathbf{S}$ for the sample covariance matrix.)*
 
 ## Step 1: the centred data matrix
 
-Let $\mathbf{X} \in \mathbb{R}^{n \times d}$ be a data matrix of $n$ observations (rows)—for instance, $n$ contextualized occurrences of a word $w$—across $d$ embedding dimensions (columns).
+Let $\mathbf{X} \in \mathbb{R}^{n \times d}$ be a data matrix of $n$ observations (rows). For instance, $n$ contextualized occurrences of a word $w$ across $d$ embedding dimensions (columns).
 
 Before measuring variance, we mean-centre each column. Let $\bar{x}_j = \frac{1}{n} \sum_{i=1}^n X_{ij}$ be the mean of column $j$, and replace every entry $X_{ij}$ with $X_{ij} - \bar{x}_j$. After centring, the mean of every column of $\mathbf{X}$ is zero.
 
@@ -57,7 +57,7 @@ where $z_i$ is the coordinate of the $i$-th observation along the axis $\mathbf{
 Because the columns of $\mathbf{X}$ have mean zero, their linear combination $\mathbf{z} = \mathbf{X}\mathbf{v}$ also has mean zero ($\bar{z} = 0$). The sample variance of the 1D projections $z_1, \dots, z_n$ is therefore:
 
 $$
-\text{Var}(\mathbf{z}) = \frac{1}{n-1} \sum_{i=1}^n (z_i - \bar{z})^2 = \frac{1}{n-1} \mathbf{z}^\top \mathbf{z}.
+\text{Var}(\mathbf{z}) = \frac{1}{n-1} \mathbf{z}^\top \mathbf{z}.
 $$
 
 Substitute $\mathbf{z} = \mathbf{X}\mathbf{v}$:
@@ -74,7 +74,7 @@ $$
 \mathcal{L}(\mathbf{v}, \lambda) = \mathbf{v}^\top \mathbf{S} \mathbf{v} - \lambda(\mathbf{v}^\top \mathbf{v} - 1).
 $$
 
-Differentiate with respect to $\mathbf{v}$ (using $\frac{\partial}{\partial \mathbf{v}}(\mathbf{v}^\top \mathbf{S} \mathbf{v}) = 2\mathbf{S}\mathbf{v}$ for symmetric $\mathbf{S}$) and set the gradient to $\mathbf{0}$:
+Differentiate with respect to $\mathbf{v}$ and set the gradient to $\mathbf{0}$:
 
 $$
 \frac{\partial \mathcal{L}}{\partial \mathbf{v}} = 2\mathbf{S}\mathbf{v} - 2\lambda \mathbf{v} = \mathbf{0} \implies \mathbf{S}\mathbf{v} = \lambda \mathbf{v}.
@@ -132,42 +132,11 @@ $$
 \text{Explained Variance Ratio}(k) = \frac{\sum_{i=1}^k \lambda_i}{\sum_{i=1}^d \lambda_i} = \frac{\sum_{i=1}^k \frac{\sigma_i^2}{n-1}}{\sum_{i=1}^d \frac{\sigma_i^2}{n-1}} = \frac{\sum_{i=1}^k \sigma_i^2}{\sum_{i=1}^d \sigma_i^2}.
 $$
 
-The $\frac{1}{n-1}$ factors cancel out. Setting $k = 1$ gives the exact proportion of variance captured by the single best 1D axis—which is Ethayarajh's (2019) **maximum explainable variance**:
+Setting $k = 1$ gives the exact proportion of variance captured by the single best 1D axis, which is Ethayarajh's (2019) **maximum explainable variance**:
 
 $$
 \text{MEV} = \frac{\sigma_1^2}{\sum_{i} \sigma_i^2}.
 $$
-
-::: {.callout-note}
-### Centred vs. uncentred occurrence matrices
-In Ethayarajh (2019), $\text{MEV}_\ell(w)$ is computed directly on the uncentred occurrence matrix $\mathbf{X}_w$ of a word's vectors across contexts. Without centring, $\mathbf{X}_w^\top \mathbf{X}_w$ is the raw second-moment matrix rather than the centred covariance, and $\sigma_1^2 / \sum_i \sigma_i^2$ measures the fraction of total squared length $\|\mathbf{X}_w\|_F^2$ captured by the single best static vector. Because all vectors in an anisotropic layer share a large common offset (they sit in a narrow cone), $\sigma_1^2$ is automatically large even for unrelated words—which is why the paper subtracts the random-word baseline $\text{Baseline}_{\text{MEV}}(f_\ell)$ before interpreting the result.
-:::
-
-## How are the singular values $\sigma_i$ actually computed?
-
-There are two ways to obtain the singular values $\sigma_i$: the algebraic route (by hand for small matrices) and the numerical route (used by `numpy.linalg.svd` and `torch.linalg.svd`).
-
-### 1. By hand: characteristic polynomial of $\mathbf{X}^\top \mathbf{X}$
-
-1. Form the $d \times d$ symmetric matrix $\mathbf{M} = \mathbf{X}^\top \mathbf{X}$.
-2. Write the eigenvalue condition $\mathbf{M}\mathbf{v} = \lambda \mathbf{v}$ as $(\mathbf{M} - \lambda \mathbf{I})\mathbf{v} = \mathbf{0}$.
-3. A non-zero eigenvector $\mathbf{v}$ exists if and only if $\mathbf{M} - \lambda \mathbf{I}$ is singular, meaning its determinant is zero:
-   $$
-   \det(\mathbf{X}^\top \mathbf{X} - \lambda \mathbf{I}) = 0.
-   $$
-4. Solve this degree-$d$ polynomial for its roots $\lambda_1 \ge \lambda_2 \ge \dots \ge \lambda_d \ge 0$, and take their square roots:
-   $$
-   \sigma_i = \sqrt{\lambda_i}.
-   $$
-
-### 2. In software: direct SVD without forming $\mathbf{X}^\top \mathbf{X}$
-
-Standard libraries avoid multiplying $\mathbf{X}^\top \mathbf{X}$ directly because doing so **squares the condition number** of $\mathbf{X}$: if a small singular value is $10^{-8}$, squaring it into $\lambda_i = 10^{-16}$ wipes it out in 64-bit floating-point arithmetic.
-
-Instead, numerical SVD algorithms (such as Golub–Kahan) work on $\mathbf{X}$ directly in two stages:
-
-1. **Bidiagonalisation:** multiply $\mathbf{X}$ on the left and right by orthogonal Householder reflection matrices to zero out everything except the main diagonal and the superdiagonal, producing a bidiagonal matrix $\mathbf{B} = \mathbf{P}^\top \mathbf{X} \mathbf{Q}$. Because orthogonal transforms preserve lengths and angles, $\mathbf{B}$ has the exact same singular values as $\mathbf{X}$.
-2. **Iterative QR shifts:** apply fast implicit QR steps to $\mathbf{B}$ until its superdiagonal entries shrink to zero, leaving the singular values $\sigma_i$ sitting directly on the diagonal without ever squaring the matrix.
 
 ---
 

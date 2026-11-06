@@ -57,36 +57,36 @@ Ethayarajh studied hidden-layer representations (not just the input embedding ta
 
 ::: {.callout-note}
 ### Why include "layer 0"?
-Layer 0 is the raw input layer before any transformer attention or biLSTM recurrence mixes information across the sentence. Because layer 0 is not contextualized, it serves as a baseline for comparing how much contextualization each subsequent hidden layer actually adds.
+Layer 0 is the raw input layer before any transformer attention or biLSTM mixes information across the sentence. Because layer 0 is not contextualized, it serves as a baseline for comparing how much contextualization each subsequent hidden layer actually adds.
 :::
 
 ### Measuring contextuality
 
 To quantify how "contextual" a representation really is, the paper defines three metrics for a given layer $\ell$, where $f_\ell(s, i)$ maps the word at index $i$ in sentence $s$ to its vector in layer $\ell$:
 
-**1. Self-similarity ($\text{SelfSim}$).** Let a word $w$ appear in $n$ distinct sentences $\{s_1, \dots, s_n\}$ at indices $\{i_1, \dots, i_n\}$. Its self-similarity in layer $\ell$ is the average pairwise cosine similarity between its representations across those $n$ contexts:
+**1. Self-similarity ($\text{SelfSim}$):** Let a word $w$ appear in $n$ distinct sentences $\{s_1, \dots, s_n\}$ at indices $\{i_1, \dots, i_n\}$. Its self-similarity in layer $\ell$ is the average pairwise cosine similarity between its representations across those $n$ contexts:
 
 $$\text{SelfSim}_\ell(w) = \frac{1}{n^2 - n} \sum_{j=1}^{n} \sum_{k \ne j} \cos\big(f_\ell(s_j, i_j),\, f_\ell(s_k, i_k)\big)$$
 
-*Intuition:* If a layer does not contextualize $w$ at all, every occurrence gets the exact same vector and $\text{SelfSim}_\ell(w) = 1$. The more a layer bends $w$'s vector to fit each surrounding sentence, the further apart those occurrences drift, and the lower $\text{SelfSim}_\ell(w)$ drops.
+*Intuition:* If a layer does not contextualize $w$ at all, every occurrence gets the exact same vector and $\text{SelfSim}_\ell(w) = 1$. The more a layer bends $w$'s vector to fit its surrounding sentence, the further apart those occurrences drift, and the lower $\text{SelfSim}_\ell(w)$ drops.
 
-**2. Intra-sentence similarity ($\text{IntraSim}$).** Let $s = \langle w_1, \dots, w_n \rangle$ be a single sentence of $n$ words, and let $\mathbf{s}_\ell = \frac{1}{n}\sum_{i=1}^{n} f_\ell(s, i)$ be the mean of all word vectors in that sentence. The intra-sentence similarity is the average cosine between each word in $s$ and the sentence mean:
+**2. Intra-sentence similarity ($\text{IntraSim}$):** Let $s = \langle w_1, \dots, w_n \rangle$ be a single sentence of $n$ words, and let $\mathbf{s}_\ell = \frac{1}{n}\sum_{i=1}^{n} f_\ell(s, i)$ be the mean of all word vectors in that sentence. The intra-sentence similarity is the average cosine between each word in $s$ and the sentence mean:
 
 $$\text{IntraSim}_\ell(s) = \frac{1}{n} \sum_{i=1}^{n} \cos\big(\mathbf{s}_\ell,\, f_\ell(s, i)\big)$$
 
 *Intuition:* $\text{SelfSim}$ tells us *whether* a word's vector changes across sentences, while $\text{IntraSim}$ tells us *how* that change shows up in space. If $\text{SelfSim}$ is low but $\text{IntraSim}$ is high, the model contextualizes crudely by pulling all words in the same sentence toward a shared sentence vector. If both $\text{SelfSim}$ and $\text{IntraSim}$ are low, every word gets a context-specific vector that still remains distinct from the other words in the same sentence.
 
-**3. Maximum explainable variance ($\text{MEV}$).** Stack a word $w$'s representations across its $n$ contexts as rows of an occurrence matrix $\mathbf{X}_w = [f_\ell(s_1, i_1); \dots; f_\ell(s_n, i_n)]$, and let $\sigma_1 \ge \sigma_2 \ge \dots \ge \sigma_m$ be its singular values. The maximum explainable variance is the fraction of total variance captured by the first principal component:
+**3. Maximum explainable variance ($\text{MEV}$):** Stack a word $w$'s representations across its $n$ contexts as rows of an occurrence matrix $\mathbf{X}_w = [f_\ell(s_1, i_1); \dots; f_\ell(s_n, i_n)]$, and let $\sigma_1 \ge \sigma_2 \ge \dots \ge \sigma_m$ be its singular values. The maximum explainable variance is the fraction of total variance captured by the first principal component:
 
 $$\text{MEV}_\ell(w) = \frac{\sigma_1^2}{\sum_{i} \sigma_i^2}$$
 
-*(For the step-by-step proof of why this ratio of squared singular values equals the maximum variance along a single 1D axis, see the [MEV and SVD derivation page](mev-derivation.qmd).)*
+*(For the step-by-step proof of why this ratio of squared singular values equals the maximum variance along a single 1D axis, see the [MEV derivation page](mev-derivation.qmd).)*
 
 *Intuition:* $\text{MEV}$ puts an upper bound on how well a single static vector could approximate all of $w$'s contextualized vectors. If $\text{MEV}_\ell(w) = 1$, all occurrences of $w$ lie along a single line and one static embedding can replace them without loss. The closer $\text{MEV}_\ell(w)$ is to 0, the more spread out $w$'s representations are across directions, and the worse any static replacement will be.
 
 ### Adjusting for anisotropy
 
-Raw similarity scores can be misleading when the underlying space is anisotropic. Suppose a layer is squeezed into such a narrow cone that *any* two random words have an average cosine similarity of $0.99$. In that layer, observing $\text{SelfSim}_\ell(w) = 0.95$ does not mean $w$ is poorly contextualized, it means different occurrences of $w$ are actually *less* similar to each other than two completely unrelated words picked at random.
+Raw similarity scores can be misleading when the underlying space is anisotropic. Suppose a layer is squeezed into such a narrow cone that any two random words have an average cosine similarity of $0.99$. In that layer, observing $\text{SelfSim}_\ell(w) = 0.95$ does not mean $w$ is poorly contextualized, it means different occurrences of $w$ are actually less similar to each other than two completely unrelated words picked at random.
 
 To separate true contextualization from the background geometry of the cone, Ethayarajh computes a layer-specific **anisotropic baseline** (estimated over 1,000 uniformly randomly sampled word occurrences $\mathcal{O}$) and subtracts it from each raw metric:
 
@@ -113,12 +113,10 @@ Using the anisotropy-adjusted metrics ($\text{SelfSim}^*$, $\text{IntraSim}^*$, 
 **Finding 3: context-specificity manifests differently per model.** Adjusted intra-sentence similarity ($\text{IntraSim}^*$) diverges sharply across architectures:
 
 - **ELMo:** $\text{IntraSim}^*$ rises in higher layers, meaning words in the same sentence are pulled closer together in vector space as they incorporate shared sentence context.
-- **BERT:** $\text{IntraSim}^*$ generally drifts downward in upper layers (words in a sentence grow more distinct from each other), but stays positive ($\approx 0.20\text{–}0.35$), meaning words in the same sentence remain closer than random words.
+- **BERT:** $\text{IntraSim}^*$ generally drifts downward in upper layers (words in a sentence grow more distinct from each other), but stays positive ($\approx 0.20\text{–}0.35$), meaning words in the same sentence remain closer than random words (the baseline).
 - **GPT-2:** $\text{IntraSim}^*$ is close to 0 across almost all hidden layers. Words in the same sentence are no more similar to each other than two random words from different sentences, showing that high contextualization does not require sentence words to converge toward a shared mean.
 
-**Finding 4: a single static vector explains less than 5% of variance.** Across all layers of ELMo, BERT, and GPT-2, average adjusted maximum explainable variance ($\text{MEV}^*$) is below 5% (and for many words, raw $\text{MEV}$ is smaller than the random-word baseline). Even in the best theoretical case, a static vector cannot approximate a word's contextual representations. Still, if you extract static word embeddings by taking the first principal component of each word's representations in the *lower* layers (especially BERT layer 1), they outperform GloVe and FastText on most traditional word-similarity and analogy benchmarks.
-
-The paper leaves open whether making contextual representations more isotropic (for example with a penalty added to the training objective) would help
+**Finding 4: a single static vector explains less than 5% of variance.** Across all layers of ELMo, BERT, and GPT-2, average adjusted maximum explainable variance ($\text{MEV}^*$) is below 5% (and for many words, raw $\text{MEV}$ is smaller than the random-word baseline). Even in the best theoretical case (replacing with the first principal component), a static vector cannot approximate a word's contextual representations. Still, if you extract static word embeddings by taking the first principal component of each word's representations in the lower layers (especially BERT layer 1), they outperform GloVe and FastText on most traditional word-similarity and analogy benchmarks.
 
 ## Why a cone hurts similarity search
 
@@ -130,7 +128,7 @@ $$
 
 The informative part, how $\mathbf{a}$ and $\mathbf{b}$ relate, is the last term. When $\lVert\boldsymbol{\mu}\rVert$ is large, the first term dominates and every pair scores near 1: the meaningful differences are squeezed into a tiny range at the top of the scale. That makes scores fragile to noise and awkward to threshold. A fixed cutoff such as "keep results above 0.9" does not repair it, because what moved is the whole scale, not just where you cut it. Similarly, a few very-high-variance directions that carry non-semantic signal can dominate the dot product. Li et al. (2020), cited by Su et al., report for BERT sentence embeddings that word frequency biases the space.
 
-To be precise about the claim: a narrow cone does not mathematically force the ranking to flip. If $\boldsymbol{\mu}\cdot(\mathbf{a}+\mathbf{b})$ were zero and the residuals had uniform norm and no noisy dominant directions, the $\lVert\boldsymbol{\mu}\rVert^2$ term would just shift the dot product by a constant (and compress cosine similarity monotonically toward 1) without changing which pair is higher. The problem is that real embeddings are not that clean. The empirical evidence shows that raw BERT sentence embeddings compared with cosine do poorly on similarity benchmarks, and removing the anisotropy improves them (numbers below).
+To be precise about the claim: a narrow cone does not mathematically force the ranking to flip. If $\boldsymbol{\mu}\cdot(\mathbf{a}+\mathbf{b})$ were zero and the residuals had uniform norm and no noisy dominant directions, the $\lVert\boldsymbol{\mu}\rVert^2$ term would just shift the dot product by a constant (and compress cosine similarity monotonically toward 1) without changing which pair is higher. The problem is that real embeddings are not that clean. The empirical evidence shows that raw BERT sentence embeddings compared with cosine do poorly on similarity benchmarks, and removing the anisotropy improves them.
 
 ## Whitening
 
@@ -158,14 +156,13 @@ flowchart LR
 Using the notation of Su et al. (row vectors; $N$ embeddings $\mathbf{x}_i \in \mathbb{R}^{1\times d}$):
 
 $$
-\boldsymbol{\mu} = \frac{1}{N}\sum_{i=1}^{N}\mathbf{x}_i, \qquad
-\boldsymbol{\Sigma} = \frac{1}{N}\sum_{i=1}^{N}(\mathbf{x}_i-\boldsymbol{\mu})^\top(\mathbf{x}_i-\boldsymbol{\mu})
-$$
-
-$$
-\boldsymbol{\Sigma} = \mathbf{U}\boldsymbol{\Lambda}\mathbf{U}^\top \quad\text{(SVD / eigendecomposition)}, \qquad
-\mathbf{W} = \mathbf{U}\boldsymbol{\Lambda}^{-1/2}, \qquad
+\begin{gather*}
+\boldsymbol{\mu} = \frac{1}{N}\sum_{i=1}^{N}\mathbf{x}_i \qquad
+\boldsymbol{\Sigma} = \frac{1}{N}\sum_{i=1}^{N}(\mathbf{x}_i-\boldsymbol{\mu})^\top(\mathbf{x}_i-\boldsymbol{\mu}) \\[6pt]
+\boldsymbol{\Sigma} = \mathbf{U}\boldsymbol{\Lambda}\mathbf{U}^\top \quad\text{(SVD / eigendecomposition)} \qquad
+\mathbf{W} = \mathbf{U}\boldsymbol{\Lambda}^{-1/2} \\[6pt]
 \tilde{\mathbf{x}}_i = (\mathbf{x}_i - \boldsymbol{\mu})\,\mathbf{W}
+\end{gather*}
 $$
 
 Every symbol:
@@ -179,7 +176,7 @@ Every symbol:
 
 In column-vector notation (used in some textbooks), the same transform reads $\tilde{\mathbf{h}} = \boldsymbol{\Lambda}^{-1/2}\mathbf{U}^\top(\mathbf{h}-\boldsymbol{\mu})$; it is the transpose of the row form.
 
-The check that this gives identity covariance is two lines of algebra; see the [derivation page](derivation.qmd). A tiny example: if $\boldsymbol{\Sigma}=\text{diag}(4, 1)$ then $\mathbf{U}=\mathbf{I}$, $\mathbf{W}=\text{diag}(1/2, 1)$, so the first coordinate is halved (its standard deviation was 2) and the second is left alone: both now have variance 1.
+See the [derivation page](derivation.qmd), for a step-by-step derivation of the whitening matrix, W.
 
 ### Whitening-$k$: shrinking the vectors
 
@@ -189,30 +186,13 @@ $$
 \tilde{\mathbf{x}}_i = (\mathbf{x}_i-\boldsymbol{\mu})\,\mathbf{W}[:, :k]
 $$
 
-This is equivalent to PCA (keep the top directions) followed by the per-axis rescaling. Su et al. call it **Whitening-$k$**. Because the cost of comparing two vectors grows with their dimension, a smaller $k$ also means smaller storage and cheaper similarity computation (the paper motivates the faster-retrieval claim this way). $k$ is a hyperparameter: for most of their tasks, cutting to about a third of the original dimension was near the best.
+This is equivalent to PCA (keep the top directions) followed by the per-axis rescaling. Su et al. call it **Whitening-$k$**. Because the cost of comparing two vectors grows with their dimension, a smaller $k$ also means smaller storage and cheaper similarity computation.
+
+$k$ is a hyperparameter. Across most semantic similarity benchmarks evaluated by Su et al., reducing $k$ to roughly a third of the original dimension $d$ achieved near-optimal performance.
 
 ### What it costs
 
-You need $\boldsymbol{\mu}$ ($1\times d$) and $\boldsymbol{\Sigma}$ ($d\times d$) from a representative corpus of $N$ vectors, a one-time computation of $O(N\cdot d^2)$. Both can be accumulated incrementally in a single streaming pass (without storing the vectors); the memory needed does not grow with $N$. At query time whitening is one matrix multiply per vector.
-
-## What the experiments show (Su et al., 2021)
-
-They evaluate on seven semantic textual similarity sets, reporting Spearman correlation ($\times 100$) between the cosine of two sentence embeddings and human similarity scores. Sentence embeddings are the average of BERT's first and last layers. "Target" means whitening statistics fitted on the unlabeled sentences of the evaluation dataset; "NLI" means fitted on an NLI corpus. The comparison baseline, BERT-flow (Li et al., 2020), is a more complex method that learns a neural-network transformation to a Gaussian.
-
-| BERT-base, STS-B | Spearman |
-|---|---|
-| raw (first-last-avg) | 59.04 |
-| BERT-flow (target) | 70.72 |
-| whitening (NLI) | 68.19 |
-| whitening (target) | 71.34 |
-| whitening-256 (target) | 71.43 |
-
-So whitening is competitive with the flow method, and cutting 768 to 256 dimensions did not hurt here. Two honest caveats from the same tables:
-
-- **It is not uniformly better.** On SICK-R with BERT-base, raw scores 63.75 while whitening (target) gives 60.6 and whitening-256 (target) gives 62.2.
-- **Gains shrink for models already trained for similarity.** For Sentence-BERT trained on NLI data, STS-B goes from 77.63 to 80.50 with target whitening (80.80 at 256 dimensions), with mixed results across other datasets.
-
-The dimension matters: the paper plots score against $k$ for each task, and the best $k$ differs by task (for example, SICK-R with BERT-base (NLI) rises to 66.52 at $k=109$).
+You need $\boldsymbol{\mu}$ ($1\times d$) and $\boldsymbol{\Sigma}$ ($d\times d$) from a representative corpus of $N$ vectors, a one-time computation of $O(N\cdot d^2)$. Both can be accumulated incrementally in a single streaming pass (without storing the vectors); the memory needed is $O(d^2)$ (does not grow with $N$). At query time whitening is one matrix multiply per vector.
 
 ## Try it: a NumPy demo
 
@@ -303,11 +283,10 @@ What to notice:
 
 ## Common pitfalls
 
-- **Fit on a representative corpus.** $\boldsymbol{\mu}$ and $\boldsymbol{\Sigma}$ describe your data. Statistics from a different domain can transfer worse (in the paper, target-fitted and NLI-fitted whitening win on different datasets).
-- **Transform queries and documents identically.** Use the same stored $\boldsymbol{\mu}$ and $\mathbf{W}$ for both, and rebuild any vector index built on the raw vectors.
-- **Do not whiten blindly to full rank.** Small-variance directions get amplified (see the demo). Choose $k$ on a validation task. If you have fewer vectors than dimensions ($N<d$), $\boldsymbol{\Sigma}$ is singular and cannot be inverted, so $k$ must be below its rank (or add a small constant to the variances).
+- **Fit on a representative corpus.** $\boldsymbol{\mu}$ and $\boldsymbol{\Sigma}$ describe your data. Statistics from a different domain can transfer worse.
+- **Transform queries and documents identically.** Fit $\boldsymbol{\mu}$ and $\mathbf{W}$ once on your document corpus, apply that fixed transformation to both indexed documents and incoming queries.
+- **Do not whiten blindly to full rank.** Because whitening scales each principal axis by $1/\sqrt{\lambda_j}$, tail directions with tiny variance ($\lambda_j \ll 1$) get massively amplified, turning numerical noise into dominant features. Treat $k$ as a validation hyperparameter. Moreover, if you have fewer vectors than dimensions ($N \le d$), $\boldsymbol{\Sigma}$ is rank-deficient ($\operatorname{rank}(\boldsymbol{\Sigma}) \le N - 1$) and cannot be inverted, meaning $k$ must be strictly below the rank, or you must regularize the variances with a small constant $\epsilon > 0$ (see [Companion: Deriving the Whitening Matrix](derivation.qmd) for the proof).
 - **Expect uneven gains.** Models already trained for similarity benefit less, and some datasets get worse.
-- **Do not mix up the settings.** Ethayarajh analyses hidden states of language models; Su et al. whiten sentence embeddings built from BERT layers. Neither is the same thing as the input embedding table, nor as a dedicated text-embedding model.
 - **Measure your own baseline.** Compute the average random-pair cosine on your data before deciding it is a problem.
 
 ## References
