@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="dcterms.date" content="2026-11-01">
-<meta name="description" content="Step-by-step derivation of W = U Λ^(-1/2), the Whitening-k truncation, and exact streaming updates for the mean and covariance.">
+<meta name="description" content="Step-by-step derivation of the Whitening Matrix (W), the Whitening-k truncation, and exact streaming updates for the mean and covariance.">
 
 <title>Companion: Deriving the Whitening Matrix – Agentic AI Notes</title>
 <style>
@@ -157,11 +157,19 @@ window.Quarto = {
   <li><a href="#setup" id="toc-setup" class="nav-link active" data-scroll-target="#setup">Setup</a></li>
   <li><a href="#step-1-mean-and-covariance-of-the-transformed-data" id="toc-step-1-mean-and-covariance-of-the-transformed-data" class="nav-link" data-scroll-target="#step-1-mean-and-covariance-of-the-transformed-data">Step 1: mean and covariance of the transformed data</a></li>
   <li><a href="#step-2-diagonalise-boldsymbolsigma" id="toc-step-2-diagonalise-boldsymbolsigma" class="nav-link" data-scroll-target="#step-2-diagonalise-boldsymbolsigma">Step 2: diagonalise <span class="math inline">\(\boldsymbol{\Sigma}\)</span></a></li>
-  <li><a href="#step-3-solve-for-mathbfw" id="toc-step-3-solve-for-mathbfw" class="nav-link" data-scroll-target="#step-3-solve-for-mathbfw">Step 3: solve for <span class="math inline">\(\mathbf{W}\)</span></a></li>
+  <li><a href="#step-3-solve-for-mathbfw" id="toc-step-3-solve-for-mathbfw" class="nav-link" data-scroll-target="#step-3-solve-for-mathbfw">Step 3: solve for <span class="math inline">\(\mathbf{W}\)</span></a>
+  <ul class="collapse">
   <li><a href="#the-solution-is-not-unique" id="toc-the-solution-is-not-unique" class="nav-link" data-scroll-target="#the-solution-is-not-unique">The solution is not unique</a></li>
+  </ul></li>
   <li><a href="#step-4-dropping-directions-whitening-k" id="toc-step-4-dropping-directions-whitening-k" class="nav-link" data-scroll-target="#step-4-dropping-directions-whitening-k">Step 4: dropping directions (Whitening-<span class="math inline">\(k\)</span>)</a></li>
   <li><a href="#streaming-the-mean-and-covariance" id="toc-streaming-the-mean-and-covariance" class="nav-link" data-scroll-target="#streaming-the-mean-and-covariance">Streaming the mean and covariance</a></li>
   <li><a href="#why-this-matters-for-cosine" id="toc-why-this-matters-for-cosine" class="nav-link" data-scroll-target="#why-this-matters-for-cosine">Why this matters for cosine</a></li>
+  <li><a href="#numerical-stability-rank-deficiency-and-regularization" id="toc-numerical-stability-rank-deficiency-and-regularization" class="nav-link" data-scroll-target="#numerical-stability-rank-deficiency-and-regularization">Numerical Stability, Rank Deficiency, and Regularization</a>
+  <ul class="collapse">
+  <li><a href="#spectral-noise-amplification" id="toc-spectral-noise-amplification" class="nav-link" data-scroll-target="#spectral-noise-amplification">1. Spectral Noise Amplification</a></li>
+  <li><a href="#rank-deficiency-when-n-le-d" id="toc-rank-deficiency-when-n-le-d" class="nav-link" data-scroll-target="#rank-deficiency-when-n-le-d">2. Rank Deficiency When <span class="math inline">\(N \le d\)</span></a></li>
+  <li><a href="#two-remedies-truncation-vs.-tikhonov-regularization" id="toc-two-remedies-truncation-vs.-tikhonov-regularization" class="nav-link" data-scroll-target="#two-remedies-truncation-vs.-tikhonov-regularization">3. Two Remedies: Truncation vs.&nbsp;Tikhonov Regularization</a></li>
+  </ul></li>
   </ul>
 </nav>
     </div>
@@ -180,7 +188,7 @@ window.Quarto = {
 
 <div>
   <div class="description">
-    Step-by-step derivation of W = U Λ^(-1/2), the Whitening-k truncation, and exact streaming updates for the mean and covariance.
+    Step-by-step derivation of the Whitening Matrix (W), the Whitening-k truncation, and exact streaming updates for the mean and covariance.
   </div>
 </div>
 
@@ -211,12 +219,8 @@ window.Quarto = {
 \boldsymbol{\mu} = \frac{1}{N}\sum_{i=1}^{N}\mathbf{x}_i, \qquad
 \boldsymbol{\Sigma} = \frac{1}{N}\sum_{i=1}^{N}(\mathbf{x}_i-\boldsymbol{\mu})^\top(\mathbf{x}_i-\boldsymbol{\mu}) \in \mathbb{R}^{d\times d}.
 \]</span></p>
-<p>Each term <span class="math inline">\((\mathbf{x}_i-\boldsymbol{\mu})^\top(\mathbf{x}_i-\boldsymbol{\mu})\)</span> is a <span class="math inline">\(d\times d\)</span> outer product (a column times a row). <span class="math inline">\(\boldsymbol{\Sigma}\)</span> is symmetric and positive semi-definite; we assume it is positive definite (all eigenvalues <span class="math inline">\(&gt;0\)</span>, which needs enough data and no perfectly redundant coordinates).</p>
-<p>We look for a <span class="math inline">\(d\times d\)</span> matrix <span class="math inline">\(\mathbf{W}\)</span> such that</p>
-<p><span class="math display">\[
-\tilde{\mathbf{x}}_i = (\mathbf{x}_i-\boldsymbol{\mu})\,\mathbf{W}
-\]</span></p>
-<p>has mean <span class="math inline">\(\mathbf{0}\)</span> and covariance <span class="math inline">\(\mathbf{I}\)</span>.</p>
+<p><span class="math inline">\(\boldsymbol{\Sigma}\)</span> is symmetric and positive semi-definite; we assume it is positive definite (all eigenvalues <span class="math inline">\(&gt;0\)</span>, which needs enough data and no perfectly redundant coordinates).</p>
+<p>We look for a <span class="math inline">\(d\times d\)</span> matrix <span class="math inline">\(\mathbf{W}\)</span> such that <span class="math inline">\(\tilde{\mathbf{x}}_i = (\mathbf{x}_i-\boldsymbol{\mu})\,\mathbf{W}\)</span> has mean <span class="math inline">\(\mathbf{0}\)</span> and covariance <span class="math inline">\(\mathbf{I}\)</span>.</p>
 </section>
 <section id="step-1-mean-and-covariance-of-the-transformed-data" class="level2">
 <h2 class="anchored" data-anchor-id="step-1-mean-and-covariance-of-the-transformed-data">Step 1: mean and covariance of the transformed data</h2>
@@ -252,10 +256,10 @@ window.Quarto = {
 \]</span></p>
 <p>It uses <span class="math inline">\(\boldsymbol{\Lambda}^{-1/2}\)</span> being diagonal (so equal to its own transpose) and <span class="math inline">\(\mathbf{U}^\top\mathbf{U}=\mathbf{I}\)</span>. This matches the solution in Su et al.&nbsp;(2021), who reach it by writing <span class="math inline">\(\boldsymbol{\Sigma}=(\mathbf{W}^{-1})^\top\mathbf{W}^{-1}\)</span> and choosing <span class="math inline">\(\mathbf{W}^{-1}=\boldsymbol{\Lambda}^{1/2}\mathbf{U}^\top\)</span>.</p>
 <p>In column-vector notation, a vector <span class="math inline">\(\mathbf{h}\)</span> is whitened as <span class="math inline">\(\tilde{\mathbf{h}}=\boldsymbol{\Lambda}^{-1/2}\mathbf{U}^\top(\mathbf{h}-\boldsymbol{\mu})\)</span>, which is the transpose of <span class="math inline">\((\mathbf{x}-\boldsymbol{\mu})\mathbf{W}\)</span>.</p>
-</section>
-<section id="the-solution-is-not-unique" class="level2">
-<h2 class="anchored" data-anchor-id="the-solution-is-not-unique">The solution is not unique</h2>
+<section id="the-solution-is-not-unique" class="level3">
+<h3 class="anchored" data-anchor-id="the-solution-is-not-unique">The solution is not unique</h3>
 <p>If <span class="math inline">\(\mathbf{R}\)</span> is any orthogonal matrix, then <span class="math inline">\(\mathbf{W}'=\mathbf{W}\mathbf{R}\)</span> also satisfies equation (1), since <span class="math inline">\(\mathbf{R}^\top\mathbf{I}\mathbf{R}=\mathbf{I}\)</span>. Different choices of <span class="math inline">\(\mathbf{R}\)</span> give different “whitenings” with the same covariance. Choosing <span class="math inline">\(\mathbf{R}=\mathbf{I}\)</span> gives <span class="math inline">\(\mathbf{W}=\mathbf{U}\boldsymbol{\Lambda}^{-1/2}\)</span> (often called PCA whitening); choosing <span class="math inline">\(\mathbf{R}=\mathbf{U}^\top\)</span> gives <span class="math inline">\(\mathbf{U}\boldsymbol{\Lambda}^{-1/2}\mathbf{U}^\top\)</span> (ZCA whitening), which stays as close as possible to the original coordinates. Because a rotation does not change any cosine similarity <em>between whitened vectors</em>, both choices give the same pairwise cosines.</p>
+</section>
 </section>
 <section id="step-4-dropping-directions-whitening-k" class="level2">
 <h2 class="anchored" data-anchor-id="step-4-dropping-directions-whitening-k">Step 4: dropping directions (Whitening-<span class="math inline">\(k\)</span>)</h2>
@@ -279,15 +283,51 @@ window.Quarto = {
 <p><span class="math display">\[
 \boldsymbol{\Sigma}_{n+1} = \frac{n}{n+1}\boldsymbol{\Sigma}_n + \frac{n}{(n+1)^2}(\mathbf{x}_{n+1}-\boldsymbol{\mu}_n)^\top(\mathbf{x}_{n+1}-\boldsymbol{\mu}_n).
 \]</span></p>
-<p>We checked this numerically against the batch covariance (agreement to about <span class="math inline">\(10^{-15}\)</span>). Memory is <span class="math inline">\(O(d^2)\)</span> regardless of <span class="math inline">\(N\)</span>, and time is <span class="math inline">\(O(d^2)\)</span> per vector.</p>
+<p>Memory is <span class="math inline">\(O(d^2)\)</span> regardless of <span class="math inline">\(N\)</span>, and time is <span class="math inline">\(O(d^2)\)</span> per vector.</p>
 </section>
 <section id="why-this-matters-for-cosine" class="level2">
 <h2 class="anchored" data-anchor-id="why-this-matters-for-cosine">Why this matters for cosine</h2>
-<p>After whitening, <span class="math inline">\(\boldsymbol{\mu}\)</span> no longer contributes a shared offset to dot products, and each (kept) direction contributes equally to <span class="math inline">\(\mathbf{x}\cdot\mathbf{y}\)</span>. That is the “isotropic, so the coordinate formula for cosine is trustworthy” argument of the main article, and also the reason full whitening can hurt: directions with tiny variance, often mostly noise, are given the same weight as the informative ones.</p>
+<p>After whitening, <span class="math inline">\(\boldsymbol{\mu}\)</span> no longer contributes a shared offset to dot products, and each (kept) direction contributes equally to <span class="math inline">\(\mathbf{x}\cdot\mathbf{y}\)</span>. That is the “isotropic, so the coordinate formula for cosine is trustworthy” argument of the main article, and also the reason full whitening can hurt: directions with tiny variance, often mostly noise, are given the same weight as the informative ones (see the <em>Spectral Noise Amplification section</em> below).</p>
+</section>
+<section id="numerical-stability-rank-deficiency-and-regularization" class="level2">
+<h2 class="anchored" data-anchor-id="numerical-stability-rank-deficiency-and-regularization">Numerical Stability, Rank Deficiency, and Regularization</h2>
+<p>While <span class="math inline">\(\mathbf{W} = \mathbf{U}\boldsymbol{\Lambda}^{-1/2}\)</span> is exact in theory, applying it blindly at full rank (<span class="math inline">\(k = d\)</span>) introduces two practical failure modes: <strong>noise amplification</strong> in ill-conditioned directions and <strong>singularity</strong> when the sample size <span class="math inline">\(N\)</span> is small.</p>
+<section id="spectral-noise-amplification" class="level3">
+<h3 class="anchored" data-anchor-id="spectral-noise-amplification">1. Spectral Noise Amplification</h3>
+<p>Writing <span class="math inline">\(\mathbf{U} = [\mathbf{u}_1, \mathbf{u}_2, \dots, \mathbf{u}_d]\)</span> in terms of its column eigenvectors shows how <span class="math inline">\(\mathbf{W}\)</span> acts on each principal axis independently:</p>
+<p><span class="math display">\[
+\mathbf{W} = \mathbf{U}\boldsymbol{\Lambda}^{-1/2} = \begin{bmatrix} \dfrac{\mathbf{u}_1}{\sqrt{\lambda_1}} &amp; \dfrac{\mathbf{u}_2}{\sqrt{\lambda_2}} &amp; \cdots &amp; \dfrac{\mathbf{u}_d}{\sqrt{\lambda_d}} \end{bmatrix}
+\]</span></p>
+<p>For a centered embedding <span class="math inline">\(\mathbf{x}_i - \boldsymbol{\mu}\)</span>, its <span class="math inline">\(j\)</span>-th whitened coordinate is:</p>
+<p><span class="math display">\[
+\tilde{x}_{i,j} = \frac{(\mathbf{x}_i - \boldsymbol{\mu})\,\mathbf{u}_j}{\sqrt{\lambda_j}}
+\]</span></p>
+<p>In anisotropic transformer embedding spaces, the eigenvalue spectrum decays rapidly. The leading eigenvalues capture dominant semantic and structural variance, whereas the tail eigenvalues (<span class="math inline">\(\lambda_j \to 0\)</span>) often reflect floating-point roundoff or quantization noise. If <span class="math inline">\(\lambda_d = 10^{-8}\)</span>, dividing by <span class="math inline">\(\sqrt{\lambda_d}\)</span> multiplies projections along <span class="math inline">\(\mathbf{u}_d\)</span> by <span class="math inline">\(10^4\)</span>. Full-rank whitening forces every axis to unit variance (<span class="math inline">\(\lambda = 1\)</span>), giving a pure-noise tail direction the exact same weight in downstream cosine similarity as the top principal component.</p>
+</section>
+<section id="rank-deficiency-when-n-le-d" class="level3">
+<h3 class="anchored" data-anchor-id="rank-deficiency-when-n-le-d">2. Rank Deficiency When <span class="math inline">\(N \le d\)</span></h3>
+<p>Let <span class="math inline">\(\mathbf{X}_c \in \mathbb{R}^{N \times d}\)</span> denote the mean-centered embedding matrix with rows <span class="math inline">\(\mathbf{x}_i - \boldsymbol{\mu}\)</span>, so that <span class="math inline">\(\boldsymbol{\Sigma} = \frac{1}{N}\mathbf{X}_c^\top \mathbf{X}_c\)</span>. Because the rows of <span class="math inline">\(\mathbf{X}_c\)</span> sum to the zero vector, <span class="math inline">\(\sum_{i=1}^{N}(\mathbf{x}_i - \boldsymbol{\mu}) = \mathbf{0}\)</span>, they are linearly dependent and span a subspace of dimension at most <span class="math inline">\(N - 1\)</span>. Consequently:</p>
+<p><span class="math display">\[
+\operatorname{rank}(\boldsymbol{\Sigma}) = \operatorname{rank}(\mathbf{X}_c^\top \mathbf{X}_c) = \operatorname{rank}(\mathbf{X}_c) \le \min(N - 1, d)
+\]</span></p>
+<p>Whenever <span class="math inline">\(N \le d\)</span>, <span class="math inline">\(\boldsymbol{\Sigma}\)</span> is rank-deficient (singular). At least <span class="math inline">\(d - N + 1\)</span> eigenvalues are identically zero (<span class="math inline">\(\lambda_j = 0\)</span>, or <span class="math inline">\(\approx 10^{-16}\)</span> in finite precision), making <span class="math inline">\(\boldsymbol{\Lambda}^{-1/2}\)</span> undefined due to division by zero.</p>
+</section>
+<section id="two-remedies-truncation-vs.-tikhonov-regularization" class="level3">
+<h3 class="anchored" data-anchor-id="two-remedies-truncation-vs.-tikhonov-regularization">3. Two Remedies: Truncation vs.&nbsp;Tikhonov Regularization</h3>
+<p>To guarantee a well-conditioned transformation, we can either truncate the spectrum or regularize the diagonal:</p>
+<ol type="1">
+<li><strong>Spectral Truncation (Whitening-<span class="math inline">\(k\)</span>):</strong> Keep only the top <span class="math inline">\(k \le \operatorname{rank}(\boldsymbol{\Sigma})\)</span> columns of <span class="math inline">\(\mathbf{W}\)</span> corresponding to signal-bearing eigenvalues, discarding the noisy or zero-variance tail: <span class="math display">\[
+\mathbf{W}_k = \mathbf{U}_{:, :k}\,\boldsymbol{\Lambda}_{:k, :k}^{-1/2} \in \mathbb{R}^{d \times k}
+\]</span></li>
+<li><strong>Tikhonov Regularization (Diagonal Loading):</strong> Add a small damping constant <span class="math inline">\(\epsilon &gt; 0\)</span> (typically <span class="math inline">\(10^{-5}\)</span> to <span class="math inline">\(10^{-8}\)</span>) to the covariance diagonal before inversion, <span class="math inline">\(\boldsymbol{\Sigma}_{\text{reg}} = \boldsymbol{\Sigma} + \epsilon\mathbf{I}\)</span>, which shifts all eigenvalues by <span class="math inline">\(+\epsilon\)</span>: <span class="math display">\[
+\mathbf{W}_{\text{reg}} = \mathbf{U}(\boldsymbol{\Lambda} + \epsilon\mathbf{I})^{-1/2}, \qquad \text{scaling axis } j \text{ by } \frac{1}{\sqrt{\lambda_j + \epsilon}}
+\]</span> This bounds the maximum amplification factor at <span class="math inline">\(1/\sqrt{\epsilon}\)</span> and prevents division by zero even when <span class="math inline">\(\lambda_j = 0\)</span>.</li>
+</ol>
 <hr>
 <p>This work adapts material from “The Hitchhiker’s Guide to Agentic AI” by Haggai Roitman (arXiv:2606.24937v3, book version 1.4), licensed under CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/). Changes: adapted into standalone articles, with added explanations, diagrams and examples. This work is licensed under CC BY-SA 4.0.</p>
 
 
+</section>
 </section>
 
 </main> <!-- /main -->

@@ -161,11 +161,6 @@ window.Quarto = {
   <li><a href="#step-5-maximizing-variance-via-lagrange-multipliers" id="toc-step-5-maximizing-variance-via-lagrange-multipliers" class="nav-link" data-scroll-target="#step-5-maximizing-variance-via-lagrange-multipliers">Step 5: maximizing variance via Lagrange multipliers</a></li>
   <li><a href="#step-6-connecting-svd-to-the-eigenvalues-of-mathbfxtop-mathbfx" id="toc-step-6-connecting-svd-to-the-eigenvalues-of-mathbfxtop-mathbfx" class="nav-link" data-scroll-target="#step-6-connecting-svd-to-the-eigenvalues-of-mathbfxtop-mathbfx">Step 6: connecting SVD to the eigenvalues of <span class="math inline">\(\mathbf{X}^\top \mathbf{X}\)</span></a></li>
   <li><a href="#step-7-the-maximum-explainable-variance-mev-formula" id="toc-step-7-the-maximum-explainable-variance-mev-formula" class="nav-link" data-scroll-target="#step-7-the-maximum-explainable-variance-mev-formula">Step 7: the Maximum Explainable Variance (MEV) formula</a></li>
-  <li><a href="#how-are-the-singular-values-sigma_i-actually-computed" id="toc-how-are-the-singular-values-sigma_i-actually-computed" class="nav-link" data-scroll-target="#how-are-the-singular-values-sigma_i-actually-computed">How are the singular values <span class="math inline">\(\sigma_i\)</span> actually computed?</a>
-  <ul class="collapse">
-  <li><a href="#by-hand-characteristic-polynomial-of-mathbfxtop-mathbfx" id="toc-by-hand-characteristic-polynomial-of-mathbfxtop-mathbfx" class="nav-link" data-scroll-target="#by-hand-characteristic-polynomial-of-mathbfxtop-mathbfx">1. By hand: characteristic polynomial of <span class="math inline">\(\mathbf{X}^\top \mathbf{X}\)</span></a></li>
-  <li><a href="#in-software-direct-svd-without-forming-mathbfxtop-mathbfx" id="toc-in-software-direct-svd-without-forming-mathbfxtop-mathbfx" class="nav-link" data-scroll-target="#in-software-direct-svd-without-forming-mathbfxtop-mathbfx">2. In software: direct SVD without forming <span class="math inline">\(\mathbf{X}^\top \mathbf{X}\)</span></a></li>
-  </ul></li>
   </ul>
 </nav>
     </div>
@@ -207,11 +202,11 @@ window.Quarto = {
 </header>
 
 
-<p>This page is a companion to <a href="../../posts/anisotropy-whitening/index.html">Anisotropy and Whitening</a>. It derives from scratch why the <strong>maximum explainable variance (MEV)</strong> along a single axis equals the ratio of squared singular values <span class="math inline">\(\sigma_1^2 / \sum_i \sigma_i^2\)</span>, and shows how singular values connect to the eigenvalues of <span class="math inline">\(\mathbf{X}^\top \mathbf{X}\)</span>. Nothing is skipped—even the proportionality between covariance and <span class="math inline">\(\mathbf{X}^\top \mathbf{X}\)</span> is written out entry by entry.</p>
+<p>This page is a companion to <a href="../../posts/anisotropy-whitening/index.html">Anisotropy and Whitening</a>. It derives from scratch why the <strong>maximum explainable variance (MEV)</strong> along a single axis equals the ratio of squared singular values <span class="math inline">\(\sigma_1^2 / \sum_i \sigma_i^2\)</span>, and shows how singular values connect to the eigenvalues of <span class="math inline">\(\mathbf{X}^\top \mathbf{X}\)</span>.</p>
 <p><em>(Note on notation: in the main article and <a href="../../posts/anisotropy-whitening/derivation.html">whitening derivation</a>, <span class="math inline">\(\boldsymbol{\Sigma}\)</span> denotes the covariance matrix. Here we follow the standard SVD convention where <span class="math inline">\(\boldsymbol{\Sigma}\)</span> is the rectangular diagonal matrix of singular values <span class="math inline">\(\sigma_i\)</span>, and we write <span class="math inline">\(\mathbf{S}\)</span> for the sample covariance matrix.)</em></p>
 <section id="step-1-the-centred-data-matrix" class="level2">
 <h2 class="anchored" data-anchor-id="step-1-the-centred-data-matrix">Step 1: the centred data matrix</h2>
-<p>Let <span class="math inline">\(\mathbf{X} \in \mathbb{R}^{n \times d}\)</span> be a data matrix of <span class="math inline">\(n\)</span> observations (rows)—for instance, <span class="math inline">\(n\)</span> contextualized occurrences of a word <span class="math inline">\(w\)</span>—across <span class="math inline">\(d\)</span> embedding dimensions (columns).</p>
+<p>Let <span class="math inline">\(\mathbf{X} \in \mathbb{R}^{n \times d}\)</span> be a data matrix of <span class="math inline">\(n\)</span> observations (rows). For instance, <span class="math inline">\(n\)</span> contextualized occurrences of a word <span class="math inline">\(w\)</span> across <span class="math inline">\(d\)</span> embedding dimensions (columns).</p>
 <p>Before measuring variance, we mean-centre each column. Let <span class="math inline">\(\bar{x}_j = \frac{1}{n} \sum_{i=1}^n X_{ij}\)</span> be the mean of column <span class="math inline">\(j\)</span>, and replace every entry <span class="math inline">\(X_{ij}\)</span> with <span class="math inline">\(X_{ij} - \bar{x}_j\)</span>. After centring, the mean of every column of <span class="math inline">\(\mathbf{X}\)</span> is zero.</p>
 </section>
 <section id="step-2-deriving-the-exact-sample-covariance-matrix" class="level2">
@@ -245,7 +240,7 @@ S_{jk} = \frac{1}{n-1} \sum_{i=1}^n X_{ij} X_{ik}.
 <h2 class="anchored" data-anchor-id="step-4-variance-of-the-projected-data">Step 4: variance of the projected data</h2>
 <p>Because the columns of <span class="math inline">\(\mathbf{X}\)</span> have mean zero, their linear combination <span class="math inline">\(\mathbf{z} = \mathbf{X}\mathbf{v}\)</span> also has mean zero (<span class="math inline">\(\bar{z} = 0\)</span>). The sample variance of the 1D projections <span class="math inline">\(z_1, \dots, z_n\)</span> is therefore:</p>
 <p><span class="math display">\[
-\text{Var}(\mathbf{z}) = \frac{1}{n-1} \sum_{i=1}^n (z_i - \bar{z})^2 = \frac{1}{n-1} \mathbf{z}^\top \mathbf{z}.
+\text{Var}(\mathbf{z}) = \frac{1}{n-1} \mathbf{z}^\top \mathbf{z}.
 \]</span></p>
 <p>Substitute <span class="math inline">\(\mathbf{z} = \mathbf{X}\mathbf{v}\)</span>:</p>
 <p><span class="math display">\[
@@ -258,7 +253,7 @@ S_{jk} = \frac{1}{n-1} \sum_{i=1}^n X_{ij} X_{ik}.
 <p><span class="math display">\[
 \mathcal{L}(\mathbf{v}, \lambda) = \mathbf{v}^\top \mathbf{S} \mathbf{v} - \lambda(\mathbf{v}^\top \mathbf{v} - 1).
 \]</span></p>
-<p>Differentiate with respect to <span class="math inline">\(\mathbf{v}\)</span> (using <span class="math inline">\(\frac{\partial}{\partial \mathbf{v}}(\mathbf{v}^\top \mathbf{S} \mathbf{v}) = 2\mathbf{S}\mathbf{v}\)</span> for symmetric <span class="math inline">\(\mathbf{S}\)</span>) and set the gradient to <span class="math inline">\(\mathbf{0}\)</span>:</p>
+<p>Differentiate with respect to <span class="math inline">\(\mathbf{v}\)</span> and set the gradient to <span class="math inline">\(\mathbf{0}\)</span>:</p>
 <p><span class="math display">\[
 \frac{\partial \mathcal{L}}{\partial \mathbf{v}} = 2\mathbf{S}\mathbf{v} - 2\lambda \mathbf{v} = \mathbf{0} \implies \mathbf{S}\mathbf{v} = \lambda \mathbf{v}.
 \]</span></p>
@@ -305,53 +300,14 @@ S_{jk} = \frac{1}{n-1} \sum_{i=1}^n X_{ij} X_{ik}.
 <p><span class="math display">\[
 \text{Explained Variance Ratio}(k) = \frac{\sum_{i=1}^k \lambda_i}{\sum_{i=1}^d \lambda_i} = \frac{\sum_{i=1}^k \frac{\sigma_i^2}{n-1}}{\sum_{i=1}^d \frac{\sigma_i^2}{n-1}} = \frac{\sum_{i=1}^k \sigma_i^2}{\sum_{i=1}^d \sigma_i^2}.
 \]</span></p>
-<p>The <span class="math inline">\(\frac{1}{n-1}\)</span> factors cancel out. Setting <span class="math inline">\(k = 1\)</span> gives the exact proportion of variance captured by the single best 1D axis—which is Ethayarajh’s (2019) <strong>maximum explainable variance</strong>:</p>
+<p>Setting <span class="math inline">\(k = 1\)</span> gives the exact proportion of variance captured by the single best 1D axis, which is Ethayarajh’s (2019) <strong>maximum explainable variance</strong>:</p>
 <p><span class="math display">\[
 \text{MEV} = \frac{\sigma_1^2}{\sum_{i} \sigma_i^2}.
 \]</span></p>
-<div class="callout callout-style-default callout-note callout-titled">
-<div class="callout-header d-flex align-content-center">
-<div class="callout-icon-container">
-<i class="callout-icon"></i>
-</div>
-<div class="callout-title-container flex-fill">
-<span class="screen-reader-only">Note</span>Centred vs.&nbsp;uncentred occurrence matrices
-</div>
-</div>
-<div class="callout-body-container callout-body">
-<p>In Ethayarajh (2019), <span class="math inline">\(\text{MEV}_\ell(w)\)</span> is computed directly on the uncentred occurrence matrix <span class="math inline">\(\mathbf{X}_w\)</span> of a word’s vectors across contexts. Without centring, <span class="math inline">\(\mathbf{X}_w^\top \mathbf{X}_w\)</span> is the raw second-moment matrix rather than the centred covariance, and <span class="math inline">\(\sigma_1^2 / \sum_i \sigma_i^2\)</span> measures the fraction of total squared length <span class="math inline">\(\|\mathbf{X}_w\|_F^2\)</span> captured by the single best static vector. Because all vectors in an anisotropic layer share a large common offset (they sit in a narrow cone), <span class="math inline">\(\sigma_1^2\)</span> is automatically large even for unrelated words—which is why the paper subtracts the random-word baseline <span class="math inline">\(\text{Baseline}_{\text{MEV}}(f_\ell)\)</span> before interpreting the result.</p>
-</div>
-</div>
-</section>
-<section id="how-are-the-singular-values-sigma_i-actually-computed" class="level2">
-<h2 class="anchored" data-anchor-id="how-are-the-singular-values-sigma_i-actually-computed">How are the singular values <span class="math inline">\(\sigma_i\)</span> actually computed?</h2>
-<p>There are two ways to obtain the singular values <span class="math inline">\(\sigma_i\)</span>: the algebraic route (by hand for small matrices) and the numerical route (used by <code>numpy.linalg.svd</code> and <code>torch.linalg.svd</code>).</p>
-<section id="by-hand-characteristic-polynomial-of-mathbfxtop-mathbfx" class="level3">
-<h3 class="anchored" data-anchor-id="by-hand-characteristic-polynomial-of-mathbfxtop-mathbfx">1. By hand: characteristic polynomial of <span class="math inline">\(\mathbf{X}^\top \mathbf{X}\)</span></h3>
-<ol type="1">
-<li>Form the <span class="math inline">\(d \times d\)</span> symmetric matrix <span class="math inline">\(\mathbf{M} = \mathbf{X}^\top \mathbf{X}\)</span>.</li>
-<li>Write the eigenvalue condition <span class="math inline">\(\mathbf{M}\mathbf{v} = \lambda \mathbf{v}\)</span> as <span class="math inline">\((\mathbf{M} - \lambda \mathbf{I})\mathbf{v} = \mathbf{0}\)</span>.</li>
-<li>A non-zero eigenvector <span class="math inline">\(\mathbf{v}\)</span> exists if and only if <span class="math inline">\(\mathbf{M} - \lambda \mathbf{I}\)</span> is singular, meaning its determinant is zero: <span class="math display">\[
-\det(\mathbf{X}^\top \mathbf{X} - \lambda \mathbf{I}) = 0.
-\]</span></li>
-<li>Solve this degree-<span class="math inline">\(d\)</span> polynomial for its roots <span class="math inline">\(\lambda_1 \ge \lambda_2 \ge \dots \ge \lambda_d \ge 0\)</span>, and take their square roots: <span class="math display">\[
-\sigma_i = \sqrt{\lambda_i}.
-\]</span></li>
-</ol>
-</section>
-<section id="in-software-direct-svd-without-forming-mathbfxtop-mathbfx" class="level3">
-<h3 class="anchored" data-anchor-id="in-software-direct-svd-without-forming-mathbfxtop-mathbfx">2. In software: direct SVD without forming <span class="math inline">\(\mathbf{X}^\top \mathbf{X}\)</span></h3>
-<p>Standard libraries avoid multiplying <span class="math inline">\(\mathbf{X}^\top \mathbf{X}\)</span> directly because doing so <strong>squares the condition number</strong> of <span class="math inline">\(\mathbf{X}\)</span>: if a small singular value is <span class="math inline">\(10^{-8}\)</span>, squaring it into <span class="math inline">\(\lambda_i = 10^{-16}\)</span> wipes it out in 64-bit floating-point arithmetic.</p>
-<p>Instead, numerical SVD algorithms (such as Golub–Kahan) work on <span class="math inline">\(\mathbf{X}\)</span> directly in two stages:</p>
-<ol type="1">
-<li><strong>Bidiagonalisation:</strong> multiply <span class="math inline">\(\mathbf{X}\)</span> on the left and right by orthogonal Householder reflection matrices to zero out everything except the main diagonal and the superdiagonal, producing a bidiagonal matrix <span class="math inline">\(\mathbf{B} = \mathbf{P}^\top \mathbf{X} \mathbf{Q}\)</span>. Because orthogonal transforms preserve lengths and angles, <span class="math inline">\(\mathbf{B}\)</span> has the exact same singular values as <span class="math inline">\(\mathbf{X}\)</span>.</li>
-<li><strong>Iterative QR shifts:</strong> apply fast implicit QR steps to <span class="math inline">\(\mathbf{B}\)</span> until its superdiagonal entries shrink to zero, leaving the singular values <span class="math inline">\(\sigma_i\)</span> sitting directly on the diagonal without ever squaring the matrix.</li>
-</ol>
 <hr>
 <p>This work adapts material from “The Hitchhiker’s Guide to Agentic AI” by Haggai Roitman (arXiv:2606.24937v3, book version 1.4), licensed under CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/). Changes: adapted into standalone articles, with added explanations, diagrams and examples. This work is licensed under CC BY-SA 4.0.</p>
 
 
-</section>
 </section>
 
 </main> <!-- /main -->

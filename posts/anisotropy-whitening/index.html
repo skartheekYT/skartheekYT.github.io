@@ -211,7 +211,6 @@ window.Quarto = {
   <li><a href="#whitening-k-shrinking-the-vectors" id="toc-whitening-k-shrinking-the-vectors" class="nav-link" data-scroll-target="#whitening-k-shrinking-the-vectors">Whitening-<span class="math inline">\(k\)</span>: shrinking the vectors</a></li>
   <li><a href="#what-it-costs" id="toc-what-it-costs" class="nav-link" data-scroll-target="#what-it-costs">What it costs</a></li>
   </ul></li>
-  <li><a href="#what-the-experiments-show-su-et-al.-2021" id="toc-what-the-experiments-show-su-et-al.-2021" class="nav-link" data-scroll-target="#what-the-experiments-show-su-et-al.-2021">What the experiments show (Su et al., 2021)</a></li>
   <li><a href="#try-it-a-numpy-demo" id="toc-try-it-a-numpy-demo" class="nav-link" data-scroll-target="#try-it-a-numpy-demo">Try it: a NumPy demo</a></li>
   <li><a href="#alternatives" id="toc-alternatives" class="nav-link" data-scroll-target="#alternatives">Alternatives</a></li>
   <li><a href="#common-pitfalls" id="toc-common-pitfalls" class="nav-link" data-scroll-target="#common-pitfalls">Common pitfalls</a></li>
@@ -309,26 +308,26 @@ window.Quarto = {
 </div>
 </div>
 <div class="callout-body-container callout-body">
-<p>Layer 0 is the raw input layer before any transformer attention or biLSTM recurrence mixes information across the sentence. Because layer 0 is not contextualized, it serves as a baseline for comparing how much contextualization each subsequent hidden layer actually adds.</p>
+<p>Layer 0 is the raw input layer before any transformer attention or biLSTM mixes information across the sentence. Because layer 0 is not contextualized, it serves as a baseline for comparing how much contextualization each subsequent hidden layer actually adds.</p>
 </div>
 </div>
 <section id="measuring-contextuality" class="level3">
 <h3 class="anchored" data-anchor-id="measuring-contextuality">Measuring contextuality</h3>
 <p>To quantify how “contextual” a representation really is, the paper defines three metrics for a given layer <span class="math inline">\(\ell\)</span>, where <span class="math inline">\(f_\ell(s, i)\)</span> maps the word at index <span class="math inline">\(i\)</span> in sentence <span class="math inline">\(s\)</span> to its vector in layer <span class="math inline">\(\ell\)</span>:</p>
-<p><strong>1. Self-similarity (<span class="math inline">\(\text{SelfSim}\)</span>).</strong> Let a word <span class="math inline">\(w\)</span> appear in <span class="math inline">\(n\)</span> distinct sentences <span class="math inline">\(\{s_1, \dots, s_n\}\)</span> at indices <span class="math inline">\(\{i_1, \dots, i_n\}\)</span>. Its self-similarity in layer <span class="math inline">\(\ell\)</span> is the average pairwise cosine similarity between its representations across those <span class="math inline">\(n\)</span> contexts:</p>
+<p><strong>1. Self-similarity (<span class="math inline">\(\text{SelfSim}\)</span>):</strong> Let a word <span class="math inline">\(w\)</span> appear in <span class="math inline">\(n\)</span> distinct sentences <span class="math inline">\(\{s_1, \dots, s_n\}\)</span> at indices <span class="math inline">\(\{i_1, \dots, i_n\}\)</span>. Its self-similarity in layer <span class="math inline">\(\ell\)</span> is the average pairwise cosine similarity between its representations across those <span class="math inline">\(n\)</span> contexts:</p>
 <p><span class="math display">\[\text{SelfSim}_\ell(w) = \frac{1}{n^2 - n} \sum_{j=1}^{n} \sum_{k \ne j} \cos\big(f_\ell(s_j, i_j),\, f_\ell(s_k, i_k)\big)\]</span></p>
-<p><em>Intuition:</em> If a layer does not contextualize <span class="math inline">\(w\)</span> at all, every occurrence gets the exact same vector and <span class="math inline">\(\text{SelfSim}_\ell(w) = 1\)</span>. The more a layer bends <span class="math inline">\(w\)</span>’s vector to fit each surrounding sentence, the further apart those occurrences drift, and the lower <span class="math inline">\(\text{SelfSim}_\ell(w)\)</span> drops.</p>
-<p><strong>2. Intra-sentence similarity (<span class="math inline">\(\text{IntraSim}\)</span>).</strong> Let <span class="math inline">\(s = \langle w_1, \dots, w_n \rangle\)</span> be a single sentence of <span class="math inline">\(n\)</span> words, and let <span class="math inline">\(\mathbf{s}_\ell = \frac{1}{n}\sum_{i=1}^{n} f_\ell(s, i)\)</span> be the mean of all word vectors in that sentence. The intra-sentence similarity is the average cosine between each word in <span class="math inline">\(s\)</span> and the sentence mean:</p>
+<p><em>Intuition:</em> If a layer does not contextualize <span class="math inline">\(w\)</span> at all, every occurrence gets the exact same vector and <span class="math inline">\(\text{SelfSim}_\ell(w) = 1\)</span>. The more a layer bends <span class="math inline">\(w\)</span>’s vector to fit its surrounding sentence, the further apart those occurrences drift, and the lower <span class="math inline">\(\text{SelfSim}_\ell(w)\)</span> drops.</p>
+<p><strong>2. Intra-sentence similarity (<span class="math inline">\(\text{IntraSim}\)</span>):</strong> Let <span class="math inline">\(s = \langle w_1, \dots, w_n \rangle\)</span> be a single sentence of <span class="math inline">\(n\)</span> words, and let <span class="math inline">\(\mathbf{s}_\ell = \frac{1}{n}\sum_{i=1}^{n} f_\ell(s, i)\)</span> be the mean of all word vectors in that sentence. The intra-sentence similarity is the average cosine between each word in <span class="math inline">\(s\)</span> and the sentence mean:</p>
 <p><span class="math display">\[\text{IntraSim}_\ell(s) = \frac{1}{n} \sum_{i=1}^{n} \cos\big(\mathbf{s}_\ell,\, f_\ell(s, i)\big)\]</span></p>
 <p><em>Intuition:</em> <span class="math inline">\(\text{SelfSim}\)</span> tells us <em>whether</em> a word’s vector changes across sentences, while <span class="math inline">\(\text{IntraSim}\)</span> tells us <em>how</em> that change shows up in space. If <span class="math inline">\(\text{SelfSim}\)</span> is low but <span class="math inline">\(\text{IntraSim}\)</span> is high, the model contextualizes crudely by pulling all words in the same sentence toward a shared sentence vector. If both <span class="math inline">\(\text{SelfSim}\)</span> and <span class="math inline">\(\text{IntraSim}\)</span> are low, every word gets a context-specific vector that still remains distinct from the other words in the same sentence.</p>
-<p><strong>3. Maximum explainable variance (<span class="math inline">\(\text{MEV}\)</span>).</strong> Stack a word <span class="math inline">\(w\)</span>’s representations across its <span class="math inline">\(n\)</span> contexts as rows of an occurrence matrix <span class="math inline">\(\mathbf{X}_w = [f_\ell(s_1, i_1); \dots; f_\ell(s_n, i_n)]\)</span>, and let <span class="math inline">\(\sigma_1 \ge \sigma_2 \ge \dots \ge \sigma_m\)</span> be its singular values. The maximum explainable variance is the fraction of total variance captured by the first principal component:</p>
+<p><strong>3. Maximum explainable variance (<span class="math inline">\(\text{MEV}\)</span>):</strong> Stack a word <span class="math inline">\(w\)</span>’s representations across its <span class="math inline">\(n\)</span> contexts as rows of an occurrence matrix <span class="math inline">\(\mathbf{X}_w = [f_\ell(s_1, i_1); \dots; f_\ell(s_n, i_n)]\)</span>, and let <span class="math inline">\(\sigma_1 \ge \sigma_2 \ge \dots \ge \sigma_m\)</span> be its singular values. The maximum explainable variance is the fraction of total variance captured by the first principal component:</p>
 <p><span class="math display">\[\text{MEV}_\ell(w) = \frac{\sigma_1^2}{\sum_{i} \sigma_i^2}\]</span></p>
-<p><em>(For the step-by-step proof of why this ratio of squared singular values equals the maximum variance along a single 1D axis, see the <a href="../../posts/anisotropy-whitening/mev-derivation.html">MEV and SVD derivation page</a>.)</em></p>
+<p><em>(For the step-by-step proof of why this ratio of squared singular values equals the maximum variance along a single 1D axis, see the <a href="../../posts/anisotropy-whitening/mev-derivation.html">MEV derivation page</a>.)</em></p>
 <p><em>Intuition:</em> <span class="math inline">\(\text{MEV}\)</span> puts an upper bound on how well a single static vector could approximate all of <span class="math inline">\(w\)</span>’s contextualized vectors. If <span class="math inline">\(\text{MEV}_\ell(w) = 1\)</span>, all occurrences of <span class="math inline">\(w\)</span> lie along a single line and one static embedding can replace them without loss. The closer <span class="math inline">\(\text{MEV}_\ell(w)\)</span> is to 0, the more spread out <span class="math inline">\(w\)</span>’s representations are across directions, and the worse any static replacement will be.</p>
 </section>
 <section id="adjusting-for-anisotropy" class="level3">
 <h3 class="anchored" data-anchor-id="adjusting-for-anisotropy">Adjusting for anisotropy</h3>
-<p>Raw similarity scores can be misleading when the underlying space is anisotropic. Suppose a layer is squeezed into such a narrow cone that <em>any</em> two random words have an average cosine similarity of <span class="math inline">\(0.99\)</span>. In that layer, observing <span class="math inline">\(\text{SelfSim}_\ell(w) = 0.95\)</span> does not mean <span class="math inline">\(w\)</span> is poorly contextualized, it means different occurrences of <span class="math inline">\(w\)</span> are actually <em>less</em> similar to each other than two completely unrelated words picked at random.</p>
+<p>Raw similarity scores can be misleading when the underlying space is anisotropic. Suppose a layer is squeezed into such a narrow cone that any two random words have an average cosine similarity of <span class="math inline">\(0.99\)</span>. In that layer, observing <span class="math inline">\(\text{SelfSim}_\ell(w) = 0.95\)</span> does not mean <span class="math inline">\(w\)</span> is poorly contextualized, it means different occurrences of <span class="math inline">\(w\)</span> are actually less similar to each other than two completely unrelated words picked at random.</p>
 <p>To separate true contextualization from the background geometry of the cone, Ethayarajh computes a layer-specific <strong>anisotropic baseline</strong> (estimated over 1,000 uniformly randomly sampled word occurrences <span class="math inline">\(\mathcal{O}\)</span>) and subtracts it from each raw metric:</p>
 <ul>
 <li>For <span class="math inline">\(\text{SelfSim}\)</span> and <span class="math inline">\(\text{IntraSim}\)</span>, the baseline is the expected cosine similarity between two randomly sampled words from different contexts in layer <span class="math inline">\(\ell\)</span>:</li>
@@ -348,11 +347,10 @@ window.Quarto = {
 <p><strong>Finding 3: context-specificity manifests differently per model.</strong> Adjusted intra-sentence similarity (<span class="math inline">\(\text{IntraSim}^*\)</span>) diverges sharply across architectures:</p>
 <ul>
 <li><strong>ELMo:</strong> <span class="math inline">\(\text{IntraSim}^*\)</span> rises in higher layers, meaning words in the same sentence are pulled closer together in vector space as they incorporate shared sentence context.</li>
-<li><strong>BERT:</strong> <span class="math inline">\(\text{IntraSim}^*\)</span> generally drifts downward in upper layers (words in a sentence grow more distinct from each other), but stays positive (<span class="math inline">\(\approx 0.20\text{–}0.35\)</span>), meaning words in the same sentence remain closer than random words.</li>
+<li><strong>BERT:</strong> <span class="math inline">\(\text{IntraSim}^*\)</span> generally drifts downward in upper layers (words in a sentence grow more distinct from each other), but stays positive (<span class="math inline">\(\approx 0.20\text{–}0.35\)</span>), meaning words in the same sentence remain closer than random words (the baseline).</li>
 <li><strong>GPT-2:</strong> <span class="math inline">\(\text{IntraSim}^*\)</span> is close to 0 across almost all hidden layers. Words in the same sentence are no more similar to each other than two random words from different sentences, showing that high contextualization does not require sentence words to converge toward a shared mean.</li>
 </ul>
-<p><strong>Finding 4: a single static vector explains less than 5% of variance.</strong> Across all layers of ELMo, BERT, and GPT-2, average adjusted maximum explainable variance (<span class="math inline">\(\text{MEV}^*\)</span>) is below 5% (and for many words, raw <span class="math inline">\(\text{MEV}\)</span> is smaller than the random-word baseline). Even in the best theoretical case, a static vector cannot approximate a word’s contextual representations. Still, if you extract static word embeddings by taking the first principal component of each word’s representations in the <em>lower</em> layers (especially BERT layer 1), they outperform GloVe and FastText on most traditional word-similarity and analogy benchmarks.</p>
-<p>The paper leaves open whether making contextual representations more isotropic (for example with a penalty added to the training objective) would help</p>
+<p><strong>Finding 4: a single static vector explains less than 5% of variance.</strong> Across all layers of ELMo, BERT, and GPT-2, average adjusted maximum explainable variance (<span class="math inline">\(\text{MEV}^*\)</span>) is below 5% (and for many words, raw <span class="math inline">\(\text{MEV}\)</span> is smaller than the random-word baseline). Even in the best theoretical case (replacing with the first principal component), a static vector cannot approximate a word’s contextual representations. Still, if you extract static word embeddings by taking the first principal component of each word’s representations in the lower layers (especially BERT layer 1), they outperform GloVe and FastText on most traditional word-similarity and analogy benchmarks.</p>
 </section>
 </section>
 <section id="why-a-cone-hurts-similarity-search" class="level2">
@@ -362,7 +360,7 @@ window.Quarto = {
 \mathbf{x}\cdot\mathbf{y} = \lVert\boldsymbol{\mu}\rVert^2 + \boldsymbol{\mu}\cdot(\mathbf{a}+\mathbf{b}) + \mathbf{a}\cdot\mathbf{b}.
 \]</span></p>
 <p>The informative part, how <span class="math inline">\(\mathbf{a}\)</span> and <span class="math inline">\(\mathbf{b}\)</span> relate, is the last term. When <span class="math inline">\(\lVert\boldsymbol{\mu}\rVert\)</span> is large, the first term dominates and every pair scores near 1: the meaningful differences are squeezed into a tiny range at the top of the scale. That makes scores fragile to noise and awkward to threshold. A fixed cutoff such as “keep results above 0.9” does not repair it, because what moved is the whole scale, not just where you cut it. Similarly, a few very-high-variance directions that carry non-semantic signal can dominate the dot product. Li et al.&nbsp;(2020), cited by Su et al., report for BERT sentence embeddings that word frequency biases the space.</p>
-<p>To be precise about the claim: a narrow cone does not mathematically force the ranking to flip. If <span class="math inline">\(\boldsymbol{\mu}\cdot(\mathbf{a}+\mathbf{b})\)</span> were zero and the residuals had uniform norm and no noisy dominant directions, the <span class="math inline">\(\lVert\boldsymbol{\mu}\rVert^2\)</span> term would just shift the dot product by a constant (and compress cosine similarity monotonically toward 1) without changing which pair is higher. The problem is that real embeddings are not that clean. The empirical evidence shows that raw BERT sentence embeddings compared with cosine do poorly on similarity benchmarks, and removing the anisotropy improves them (numbers below).</p>
+<p>To be precise about the claim: a narrow cone does not mathematically force the ranking to flip. If <span class="math inline">\(\boldsymbol{\mu}\cdot(\mathbf{a}+\mathbf{b})\)</span> were zero and the residuals had uniform norm and no noisy dominant directions, the <span class="math inline">\(\lVert\boldsymbol{\mu}\rVert^2\)</span> term would just shift the dot product by a constant (and compress cosine similarity monotonically toward 1) without changing which pair is higher. The problem is that real embeddings are not that clean. The empirical evidence shows that raw BERT sentence embeddings compared with cosine do poorly on similarity benchmarks, and removing the anisotropy improves them.</p>
 </section>
 <section id="whitening" class="level2">
 <h2 class="anchored" data-anchor-id="whitening">Whitening</h2>
@@ -397,13 +395,13 @@ window.Quarto = {
 <h3 class="anchored" data-anchor-id="the-formulas">The formulas</h3>
 <p>Using the notation of Su et al.&nbsp;(row vectors; <span class="math inline">\(N\)</span> embeddings <span class="math inline">\(\mathbf{x}_i \in \mathbb{R}^{1\times d}\)</span>):</p>
 <p><span class="math display">\[
-\boldsymbol{\mu} = \frac{1}{N}\sum_{i=1}^{N}\mathbf{x}_i, \qquad
-\boldsymbol{\Sigma} = \frac{1}{N}\sum_{i=1}^{N}(\mathbf{x}_i-\boldsymbol{\mu})^\top(\mathbf{x}_i-\boldsymbol{\mu})
-\]</span></p>
-<p><span class="math display">\[
-\boldsymbol{\Sigma} = \mathbf{U}\boldsymbol{\Lambda}\mathbf{U}^\top \quad\text{(SVD / eigendecomposition)}, \qquad
-\mathbf{W} = \mathbf{U}\boldsymbol{\Lambda}^{-1/2}, \qquad
+\begin{gather*}
+\boldsymbol{\mu} = \frac{1}{N}\sum_{i=1}^{N}\mathbf{x}_i \qquad
+\boldsymbol{\Sigma} = \frac{1}{N}\sum_{i=1}^{N}(\mathbf{x}_i-\boldsymbol{\mu})^\top(\mathbf{x}_i-\boldsymbol{\mu}) \\[6pt]
+\boldsymbol{\Sigma} = \mathbf{U}\boldsymbol{\Lambda}\mathbf{U}^\top \quad\text{(SVD / eigendecomposition)} \qquad
+\mathbf{W} = \mathbf{U}\boldsymbol{\Lambda}^{-1/2} \\[6pt]
 \tilde{\mathbf{x}}_i = (\mathbf{x}_i - \boldsymbol{\mu})\,\mathbf{W}
+\end{gather*}
 \]</span></p>
 <p>Every symbol:</p>
 <ul>
@@ -415,7 +413,7 @@ window.Quarto = {
 <li><span class="math inline">\(\mathbf{W}\)</span>: the single <span class="math inline">\(d\times d\)</span> matrix that does rotate-and-rescale; applying it is one matrix multiply.</li>
 </ul>
 <p>In column-vector notation (used in some textbooks), the same transform reads <span class="math inline">\(\tilde{\mathbf{h}} = \boldsymbol{\Lambda}^{-1/2}\mathbf{U}^\top(\mathbf{h}-\boldsymbol{\mu})\)</span>; it is the transpose of the row form.</p>
-<p>The check that this gives identity covariance is two lines of algebra; see the <a href="../../posts/anisotropy-whitening/derivation.html">derivation page</a>. A tiny example: if <span class="math inline">\(\boldsymbol{\Sigma}=\text{diag}(4, 1)\)</span> then <span class="math inline">\(\mathbf{U}=\mathbf{I}\)</span>, <span class="math inline">\(\mathbf{W}=\text{diag}(1/2, 1)\)</span>, so the first coordinate is halved (its standard deviation was 2) and the second is left alone: both now have variance 1.</p>
+<p>See the <a href="../../posts/anisotropy-whitening/derivation.html">derivation page</a>, for a step-by-step derivation of the whitening matrix, W.</p>
 </section>
 <section id="whitening-k-shrinking-the-vectors" class="level3">
 <h3 class="anchored" data-anchor-id="whitening-k-shrinking-the-vectors">Whitening-<span class="math inline">\(k\)</span>: shrinking the vectors</h3>
@@ -423,52 +421,13 @@ window.Quarto = {
 <p><span class="math display">\[
 \tilde{\mathbf{x}}_i = (\mathbf{x}_i-\boldsymbol{\mu})\,\mathbf{W}[:, :k]
 \]</span></p>
-<p>This is equivalent to PCA (keep the top directions) followed by the per-axis rescaling. Su et al.&nbsp;call it <strong>Whitening-<span class="math inline">\(k\)</span></strong>. Because the cost of comparing two vectors grows with their dimension, a smaller <span class="math inline">\(k\)</span> also means smaller storage and cheaper similarity computation (the paper motivates the faster-retrieval claim this way). <span class="math inline">\(k\)</span> is a hyperparameter: for most of their tasks, cutting to about a third of the original dimension was near the best.</p>
+<p>This is equivalent to PCA (keep the top directions) followed by the per-axis rescaling. Su et al.&nbsp;call it <strong>Whitening-<span class="math inline">\(k\)</span></strong>. Because the cost of comparing two vectors grows with their dimension, a smaller <span class="math inline">\(k\)</span> also means smaller storage and cheaper similarity computation.</p>
+<p><span class="math inline">\(k\)</span> is a hyperparameter. Across most semantic similarity benchmarks evaluated by Su et al., reducing <span class="math inline">\(k\)</span> to roughly a third of the original dimension <span class="math inline">\(d\)</span> achieved near-optimal performance.</p>
 </section>
 <section id="what-it-costs" class="level3">
 <h3 class="anchored" data-anchor-id="what-it-costs">What it costs</h3>
-<p>You need <span class="math inline">\(\boldsymbol{\mu}\)</span> (<span class="math inline">\(1\times d\)</span>) and <span class="math inline">\(\boldsymbol{\Sigma}\)</span> (<span class="math inline">\(d\times d\)</span>) from a representative corpus of <span class="math inline">\(N\)</span> vectors, a one-time computation of <span class="math inline">\(O(N\cdot d^2)\)</span>. Both can be accumulated incrementally in a single streaming pass (without storing the vectors); the memory needed does not grow with <span class="math inline">\(N\)</span>. At query time whitening is one matrix multiply per vector.</p>
+<p>You need <span class="math inline">\(\boldsymbol{\mu}\)</span> (<span class="math inline">\(1\times d\)</span>) and <span class="math inline">\(\boldsymbol{\Sigma}\)</span> (<span class="math inline">\(d\times d\)</span>) from a representative corpus of <span class="math inline">\(N\)</span> vectors, a one-time computation of <span class="math inline">\(O(N\cdot d^2)\)</span>. Both can be accumulated incrementally in a single streaming pass (without storing the vectors); the memory needed is <span class="math inline">\(O(d^2)\)</span> (does not grow with <span class="math inline">\(N\)</span>). At query time whitening is one matrix multiply per vector.</p>
 </section>
-</section>
-<section id="what-the-experiments-show-su-et-al.-2021" class="level2">
-<h2 class="anchored" data-anchor-id="what-the-experiments-show-su-et-al.-2021">What the experiments show (Su et al., 2021)</h2>
-<p>They evaluate on seven semantic textual similarity sets, reporting Spearman correlation (<span class="math inline">\(\times 100\)</span>) between the cosine of two sentence embeddings and human similarity scores. Sentence embeddings are the average of BERT’s first and last layers. “Target” means whitening statistics fitted on the unlabeled sentences of the evaluation dataset; “NLI” means fitted on an NLI corpus. The comparison baseline, BERT-flow (Li et al., 2020), is a more complex method that learns a neural-network transformation to a Gaussian.</p>
-<table class="caption-top table">
-<thead>
-<tr class="header">
-<th>BERT-base, STS-B</th>
-<th>Spearman</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td>raw (first-last-avg)</td>
-<td>59.04</td>
-</tr>
-<tr class="even">
-<td>BERT-flow (target)</td>
-<td>70.72</td>
-</tr>
-<tr class="odd">
-<td>whitening (NLI)</td>
-<td>68.19</td>
-</tr>
-<tr class="even">
-<td>whitening (target)</td>
-<td>71.34</td>
-</tr>
-<tr class="odd">
-<td>whitening-256 (target)</td>
-<td>71.43</td>
-</tr>
-</tbody>
-</table>
-<p>So whitening is competitive with the flow method, and cutting 768 to 256 dimensions did not hurt here. Two honest caveats from the same tables:</p>
-<ul>
-<li><strong>It is not uniformly better.</strong> On SICK-R with BERT-base, raw scores 63.75 while whitening (target) gives 60.6 and whitening-256 (target) gives 62.2.</li>
-<li><strong>Gains shrink for models already trained for similarity.</strong> For Sentence-BERT trained on NLI data, STS-B goes from 77.63 to 80.50 with target whitening (80.80 at 256 dimensions), with mixed results across other datasets.</li>
-</ul>
-<p>The dimension matters: the paper plots score against <span class="math inline">\(k\)</span> for each task, and the best <span class="math inline">\(k\)</span> differs by task (for example, SICK-R with BERT-base (NLI) rises to 66.52 at <span class="math inline">\(k=109\)</span>).</p>
 </section>
 <section id="try-it-a-numpy-demo" class="level2">
 <h2 class="anchored" data-anchor-id="try-it-a-numpy-demo">Try it: a NumPy demo</h2>
@@ -555,11 +514,10 @@ P@10 whitening-64   0.563</code></pre>
 <section id="common-pitfalls" class="level2">
 <h2 class="anchored" data-anchor-id="common-pitfalls">Common pitfalls</h2>
 <ul>
-<li><strong>Fit on a representative corpus.</strong> <span class="math inline">\(\boldsymbol{\mu}\)</span> and <span class="math inline">\(\boldsymbol{\Sigma}\)</span> describe your data. Statistics from a different domain can transfer worse (in the paper, target-fitted and NLI-fitted whitening win on different datasets).</li>
-<li><strong>Transform queries and documents identically.</strong> Use the same stored <span class="math inline">\(\boldsymbol{\mu}\)</span> and <span class="math inline">\(\mathbf{W}\)</span> for both, and rebuild any vector index built on the raw vectors.</li>
-<li><strong>Do not whiten blindly to full rank.</strong> Small-variance directions get amplified (see the demo). Choose <span class="math inline">\(k\)</span> on a validation task. If you have fewer vectors than dimensions (<span class="math inline">\(N&lt;d\)</span>), <span class="math inline">\(\boldsymbol{\Sigma}\)</span> is singular and cannot be inverted, so <span class="math inline">\(k\)</span> must be below its rank (or add a small constant to the variances).</li>
+<li><strong>Fit on a representative corpus.</strong> <span class="math inline">\(\boldsymbol{\mu}\)</span> and <span class="math inline">\(\boldsymbol{\Sigma}\)</span> describe your data. Statistics from a different domain can transfer worse.</li>
+<li><strong>Transform queries and documents identically.</strong> Fit <span class="math inline">\(\boldsymbol{\mu}\)</span> and <span class="math inline">\(\mathbf{W}\)</span> once on your document corpus, apply that fixed transformation to both indexed documents and incoming queries.</li>
+<li><strong>Do not whiten blindly to full rank.</strong> Because whitening scales each principal axis by <span class="math inline">\(1/\sqrt{\lambda_j}\)</span>, tail directions with tiny variance (<span class="math inline">\(\lambda_j \ll 1\)</span>) get massively amplified, turning numerical noise into dominant features. Treat <span class="math inline">\(k\)</span> as a validation hyperparameter. Moreover, if you have fewer vectors than dimensions (<span class="math inline">\(N \le d\)</span>), <span class="math inline">\(\boldsymbol{\Sigma}\)</span> is rank-deficient (<span class="math inline">\(\operatorname{rank}(\boldsymbol{\Sigma}) \le N - 1\)</span>) and cannot be inverted, meaning <span class="math inline">\(k\)</span> must be strictly below the rank, or you must regularize the variances with a small constant <span class="math inline">\(\epsilon &gt; 0\)</span> (see <a href="../../posts/anisotropy-whitening/derivation.html">Companion: Deriving the Whitening Matrix</a> for the proof).</li>
 <li><strong>Expect uneven gains.</strong> Models already trained for similarity benefit less, and some datasets get worse.</li>
-<li><strong>Do not mix up the settings.</strong> Ethayarajh analyses hidden states of language models; Su et al.&nbsp;whiten sentence embeddings built from BERT layers. Neither is the same thing as the input embedding table, nor as a dedicated text-embedding model.</li>
 <li><strong>Measure your own baseline.</strong> Compute the average random-pair cosine on your data before deciding it is a problem.</li>
 </ul>
 </section>
