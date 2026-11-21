@@ -1,1 +1,25 @@
 /* css styles */
+
+/* Series cards (grid listing on the Series page): rounded border, lift and accent on hover */
+.quarto-grid-item.card {
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 0.75rem;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.quarto-grid-link:hover .quarto-grid-item.card,
+.quarto-grid-link:focus-visible .quarto-grid-item.card {
+  transform: translateY(-4px);
+  border-color: var(--bs-primary, #2780e3);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quarto-grid-item.card {
+    transition: none;
+  }
+  .quarto-grid-link:hover .quarto-grid-item.card,
+  .quarto-grid-link:focus-visible .quarto-grid-item.card {
+    transform: none;
+  }
+}
