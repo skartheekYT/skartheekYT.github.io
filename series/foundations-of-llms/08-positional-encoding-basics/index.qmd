@@ -1,12 +1,14 @@
 ---
-title: "Positional Encoding, Part 1: Why Transformers Need Positions"
+title: "Positional Encoding Basics: Why Transformers Need Positions"
 description: "Attention has no sense of order. Sinusoidal, learned, relative-bias and ALiBi encodings are four ways to add it."
 date: "2026-11-12"
-categories: [LLMs, transformers, positional-encoding]
+series: "Foundations of LLMs"
+part: 8
+categories: [llms, transformers, positional-encoding]
 draft: false
 ---
 
-Take the sentence "the cat sat on the mat" and shuffle it into "mat the on sat cat the". A transformer layer (without a causal mask), as originally defined, produces the *same* vector for the token "sat" in both cases. Self-attention has no built-in notion of order. This article covers why, what we do about it, and four classic answers: sinusoidal, learned absolute, relative biases, and ALiBi. [Part 2](../rope-rotary-position-embedding/index.qmd) covers rotary embeddings (RoPE), and [Part 3](../rope-context-extension/index.qmd) covers stretching a model to longer contexts.
+Take the sentence "the cat sat on the mat" and shuffle it into "mat the on sat cat the". A transformer layer (without a causal mask), as originally defined, produces the *same* vector for the token "sat" in both cases. Self-attention has no built-in notion of order. This article covers why, what we do about it, and four classic answers: sinusoidal, learned absolute, relative biases, and ALiBi. [Part 9](../09-rope-rotary-position-embedding/index.qmd) covers rotary embeddings (RoPE), and [Part 10](../10-rope-context-extension/index.qmd) covers stretching a model to longer contexts.
 
 ## 1. The problem: attention is a set operation
 
@@ -39,13 +41,13 @@ There are three natural places, and each classic method picks one.
 ```{mermaid}
 flowchart LR
   A["<b>Token embedding</b><br/>xᵢ ∈ ℝᵈ"] -->|"① add position<br/>xᵢ + pᵢ"| B["<b>Projections</b><br/>qᵢ = W_q xᵢ, kⱼ = W_k xⱼ"]
-  B -->|"③ rotate q, k<br/>(RoPE, Part 2)"| C["<b>Scores</b><br/>sᵢⱼ = qᵢᵀ kⱼ / √d_k"]
+  B -->|"③ rotate q, k<br/>(RoPE, Part 9)"| C["<b>Scores</b><br/>sᵢⱼ = qᵢᵀ kⱼ / √d_k"]
   C -->|"② subtract distance penalty<br/>sᵢⱼ − m·(i−j)"| D["<b>Softmax and weighted sum</b><br/>Σⱼ aᵢⱼ vⱼ"]
 ```
 
 1. **Add to the input** (sinusoidal, learned absolute): the position vector $p_i$ is added directly to the token embedding before the first layer.
 2. **Bias the scores** (relative-position biases, ALiBi): leave the vectors alone and add a distance-dependent number to each attention score.
-3. **Rotate queries and keys** (RoPE): transform $q$ and $k$ by a position-dependent rotation. This is Part 2.
+3. **Rotate queries and keys** (RoPE): transform $q$ and $k$ by a position-dependent rotation. This is Part 9.
 
 Good positional information should do four things:
 
@@ -162,7 +164,7 @@ $$
 \begin{pmatrix}\sin\omega_i pos\\ \cos\omega_i pos\end{pmatrix}
 $$
 
-Shifting a position by $k$ rotates each pair by an angle that depends only on $k$. Keep this "shift = rotation" picture in mind: RoPE in Part 2 is built on exactly this idea, applied in a different place.
+Shifting a position by $k$ rotates each pair by an angle that depends only on $k$. Keep this "shift = rotation" picture in mind: RoPE in Part 9 is built on exactly this idea, applied in a different place.
 
 ### 3.5 Trade-offs 
 
@@ -233,7 +235,7 @@ Note: "How Position is Modeled" indicates whether the method assigns a vector ba
 | Learned absolute | added to input embeddings | absolute | $L_{max}\times d$ | impossible without retraining |
 | Shaw / T5 biases | keys, values or attention scores | relative | small learned tables | limited (clipped or bucketed) |
 | ALiBi | attention scores | relative (fixed shape) | none | better than the above, still limited |
-| RoPE (Part 2) | rotation of $q$, $k$ | relative | none | needs scaling tricks (Part 3) |
+| RoPE (Part 9) | rotation of $q$, $k$ | relative | none | needs scaling tricks (Part 10) |
 
 ## Common pitfalls
 

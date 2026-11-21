@@ -41,8 +41,20 @@ website:
             - series/foundations-of-llms/03-anisotropy-whitening/mev-derivation.qmd
         - section: "4. Scaled Dot-Product Attention"
           href: series/foundations-of-llms/04-attention-scaled-dot-product/index.qmd
-        - section: "5. Transformer"
+        - section: "5. Masks & Cross-Attention"
           href: series/foundations-of-llms/05-attention-masks-encoder-decoder/index.qmd
+        - section: "6. Multi-Head Attention"
+          href: series/foundations-of-llms/06-multi-head-attention/index.qmd
+        - section: "7. Attention Cost & KV Cache"
+          href: series/foundations-of-llms/07-attention-cost-kv-cache/index.qmd
+        - section: "8. Positional Encoding Basics"
+          href: series/foundations-of-llms/08-positional-encoding-basics/index.qmd
+        - section: "9. RoPE"
+          href: series/foundations-of-llms/09-rope-rotary-position-embedding/index.qmd
+          contents:
+            - series/foundations-of-llms/09-rope-rotary-position-embedding/rope-derivation.qmd
+        - section: "10. Long-Context RoPE"
+          href: series/foundations-of-llms/10-rope-context-extension/index.qmd
 
   page-footer: "Content licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)"
 

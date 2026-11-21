@@ -1,12 +1,14 @@
 ---
-title: "RoPE Companion: Where the Rotation Comes From, and the Decay Bound"
+title: "Companion: Where the Rotation Comes From, and the Decay Bound"
 description: "A step-by-step derivation of the 2D rotary solution and of the long-term decay bound from the RoFormer paper, with the assumptions made explicit."
 date: "2026-11-12"
-categories: [LLMs, positional-encoding, RoPE, math]
+series: "Foundations of LLMs"
+companion: true
+categories: [llms, positional-encoding, rope, math]
 draft: false
 ---
 
-This page backs up [Part 2](index.qmd). It re-derives two results from the RoFormer paper (Su et al., 2021, Sections 3.4.1 and 3.4.3) and spells out which steps are forced and which are choices.
+This page backs up [Part 9](index.qmd). It re-derives two results from the RoFormer paper (Su et al., 2021, Sections 3.4.1 and 3.4.3) and spells out which steps are forced and which are choices.
 
 ## 1. Setting up the 2D problem
 
@@ -70,7 +72,7 @@ f_k(x_n,n) = (W_k x_n)\,e^{\mathrm{i}n\theta},\qquad
 \mathrm{Re}\!\left[f_q\overline{f_k}\right]=\mathrm{Re}\!\left[(W_qx_m)\overline{(W_kx_n)}\,e^{\mathrm{i}(m-n)\theta}\right]
 $$
 
-Multiplying by $e^{\mathrm{i}m\theta}$ is a rotation by $m\theta$, which is the matrix form used in Part 2.
+Multiplying by $e^{\mathrm{i}m\theta}$ is a rotation by $m\theta$, which is the matrix form used in Part 9.
 
 **What was assumed.** This is *a* solution, not the only one: it relies on the initial condition, on the stronger complex form of the relative-only requirement, and on the choice of position-independent radii. In $d$ dimensions the paper applies the 2D solution to each of the $d/2$ pairs separately and picks the frequencies $\theta_i=10000^{-2i/d}$ following the sinusoidal encoding. That choice is motivated by tradition and by the decay property below, not derived from the requirement.
 

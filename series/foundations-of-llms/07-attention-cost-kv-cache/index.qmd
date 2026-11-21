@@ -1,13 +1,15 @@
 ---
 title: "The Cost of Attention: n², the KV Cache, GQA and MLA"
 subtitle: "Why long contexts are expensive, and the main ideas for making them cheaper"
-date: 2026-11-07
+date: "2026-11-07"
+series: "Foundations of LLMs"
+part: 7
 draft: false
-categories: [LLM fundamentals, Transformers, Attention, Inference]
+categories: [llm-fundamentals, transformers, attention, inference]
 description: "Where attention's quadratic cost comes from, what the KV cache is and how big it gets, how GQA and MLA shrink it, and a map of the long-context fixes (FlashAttention, sliding windows, sparse and linear attention, cache eviction)."
 ---
 
-This is the fourth and last article of this attention set. We know how [attention works](../attention-scaled-dot-product/index.qmd), how it is [masked](../attention-masks-encoder-decoder/index.qmd), and how [multiple heads](../multi-head-attention/index.qmd) share the work. Now the bill: what does attention cost, and what do real systems do about it?
+This is Part 7, the fourth and last article of this attention set. We know how [attention works](../04-attention-scaled-dot-product/index.qmd), how it is [masked](../05-attention-masks-encoder-decoder/index.qmd), and how [multiple heads](../06-multi-head-attention/index.qmd) share the work. Now the bill: what does attention cost, and what do real systems do about it?
 
 There are two *different* problems hiding under "attention is expensive", and mixing them up is the most common source of confusion:
 

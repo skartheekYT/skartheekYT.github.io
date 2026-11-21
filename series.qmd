@@ -1,10 +1,10 @@
 ---
 title: "Series"
-description: ""
+description: "Sequences of articles meant to be read in order."
 listing:
   contents: "series/*/index.qmd"
   type: grid
-  fields: [title]
+  fields: [title, description]
   sort-ui: false
   filter-ui: false
 ---

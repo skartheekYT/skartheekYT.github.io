@@ -1,7 +1,7 @@
 ---
 title: "Companion: From Corpus Log-Likelihood to the WordPiece Merge Score"
 description: "A step-by-step derivation showing how WordPiece's unigram log-likelihood objective simplifies to its famous count-ratio scoring formula."
-date: 2026-10-31
+date: "2026-10-31"
 series: "Foundations of LLMs"
 companion: true
 categories: [tokenization, wordpiece, math]

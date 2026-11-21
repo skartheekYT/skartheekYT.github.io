@@ -1,13 +1,15 @@
 ---
 title: "Scaled Dot-Product Attention, Step by Step"
 subtitle: "Queries, keys, values, and why we divide by √d_k"
-date: 2026-11-07
+date: "2026-11-07"
+series: "Foundations of LLMs"
+part: 4
 draft: false
-categories: [LLM fundamentals, Transformers, Attention]
+categories: [llm-fundamentals, transformers, attention]
 description: "How a token builds a new representation as a weighted mix of all the tokens around it: the intuition, the shapes, a worked example, and the reason for the √d_k scaling."
 ---
 
-This is the first of four articles on attention. After [tokenization](../tokenization-bpe/index.qmd) and embeddings, every token is a vector. Attention is the operation that lets those vectors talk to each other, and it is the core of every Transformer. The next articles cover [masking, encoder-decoder and cross-attention](../attention-masks-encoder-decoder/index.qmd), [multi-head attention](../multi-head-attention/index.qmd), and [the cost of attention (KV cache, GQA, MLA)](../attention-cost-kv-cache/index.qmd).
+This is Part 4, the first of four articles on attention. After [tokenization](../01-tokenization-bpe/index.qmd) and embeddings, every token is a vector. Attention is the operation that lets those vectors talk to each other, and it is the core of every Transformer. The next articles cover [masking, encoder-decoder and cross-attention](../05-attention-masks-encoder-decoder/index.qmd), [multi-head attention](../06-multi-head-attention/index.qmd), and [the cost of attention (KV cache, GQA, MLA)](../07-attention-cost-kv-cache/index.qmd).
 
 ## The problem attention solves
 
@@ -184,7 +186,7 @@ In plain words:
 
 - **Sequential operations.** A recurrent layer must process position 1, then 2, then 3, and so on, so it cannot parallelize across the sequence. Attention computes all positions at once as matrix multiplications, which is what GPUs are good at.
 - **Path length.** In a recurrent network, a signal from token 1 must pass through $n-1$ steps to reach token $n$, and learning long-range dependencies is hard along such paths. In attention every pair of tokens is directly connected.
-- **Cost.** Attention is cheaper per layer than recurrence when $n < d$, which the paper notes is typical for sentence representations. When $n$ gets large the $n^2$ term hurts. That cost is the subject of [the fourth article](../attention-cost-kv-cache/index.qmd).
+- **Cost.** Attention is cheaper per layer than recurrence when $n < d$, which the paper notes is typical for sentence representations. When $n$ gets large the $n^2$ term hurts. That cost is the subject of [Part 7](../07-attention-cost-kv-cache/index.qmd).
 
 ## A minimal implementation
 
@@ -214,8 +216,8 @@ This reproduces the worked example. In a real model $Q$, $K$ and $V$ come from $
 ## What this operation does *not* do yet
 
 - **It has no sense of order.** If you shuffle the rows of $X$, the rows of the output are shuffled in exactly the same way. Attention alone cannot tell "dog bites man" from "man bites dog", so Transformers add *positional information* to the embeddings. That is the topic of a later article in this series.
-- **It looks at every token, including the future.** For text generation, a token must not see the tokens that come after it. That needs a *mask*, covered in the [next article](../attention-masks-encoder-decoder/index.qmd).
-- **It produces one weighted average per token.** *Multi-head attention* runs several of these in parallel, each with its own projections. See [the third article](../multi-head-attention/index.qmd).
+- **It looks at every token, including the future.** For text generation, a token must not see the tokens that come after it. That needs a *mask*, covered in the [Part 5](../05-attention-masks-encoder-decoder/index.qmd).
+- **It produces one weighted average per token.** *Multi-head attention* runs several of these in parallel, each with its own projections. See [Part 6](../06-multi-head-attention/index.qmd).
 
 ## Common pitfalls
 

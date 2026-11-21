@@ -1,16 +1,18 @@
 ---
-title: "Positional Encoding, Part 3: Stretching RoPE to Long Contexts"
+title: "Stretching RoPE to Long Contexts"
 description: "Why RoPE models break past their training length, and how position interpolation, NTK-aware scaling, dynamic scaling and YaRN fix it. Plus: long context is not the same as long-context use."
 date: "2026-11-12"
-categories: [LLMs, transformers, positional-encoding, RoPE, long-context]
+series: "Foundations of LLMs"
+part: 10
+categories: [llms, transformers, positional-encoding, rope, long-context]
 draft: false
 ---
 
-A model trained on 4,096-token sequences is asked to read 32,000 tokens. [Part 2](../rope-rotary-position-embedding/index.qmd) showed that RoPE is *relative*, so you might hope this just works. It does not. This article explains why, and walks through the main fixes: position interpolation (PI), NTK-aware scaling, dynamic scaling, NTK-by-parts and YaRN. It then covers what else a long-context model needs, and why a big context window does not guarantee the model uses it well.
+A model trained on 4,096-token sequences is asked to read 32,000 tokens. [Part 9](../09-rope-rotary-position-embedding/index.qmd) showed that RoPE is *relative*, so you might hope this just works. It does not. This article explains why, and walks through the main fixes: position interpolation (PI), NTK-aware scaling, dynamic scaling, NTK-by-parts and YaRN. It then covers what else a long-context model needs, and why a big context window does not guarantee the model uses it well.
 
 ## 1. Why plain RoPE fails beyond the training length
 
-Recall from Part 2 that pair $i$ of a query or key is rotated by $m\theta_i$ at position $m$, with $\theta_i = 10000^{-2i/d}$ and $i=0,\dots,d/2-1$. Its **wavelength** is $\lambda_i = 2\pi/\theta_i$, the number of tokens per full turn. Let $L$ be the training length.
+Recall from Part 9 that pair $i$ of a query or key is rotated by $m\theta_i$ at position $m$, with $\theta_i = 10000^{-2i/d}$ and $i=0,\dots,d/2-1$. Its **wavelength** is $\lambda_i = 2\pi/\theta_i$, the number of tokens per full turn. Let $L$ be the training length.
 
 - **Fast pairs** ($\lambda_i \ll L$) complete many turns during training, so they have seen every angle many times. Positions beyond $L$ just revisit familiar angles.
 - **Slow pairs** ($\lambda_i > L$) never complete a turn during training. They have only ever seen a *partial arc* of angles. Beyond position $L$ they enter angles the network has never encountered.
@@ -140,7 +142,7 @@ for name, f in [("PI", pi_freqs(d, s)),
 print("pairs that never complete a turn in L:", int((orig > L).sum()), "of", d // 2)   # 18 of 64
 ```
 
-To use any of these, pass the modified frequencies to the RoPE function from Part 2 (replace `rope_freqs(d, base)` by the modified array) and, for YaRN, multiply the rotated $q$ and $k$ by `yarn_scale(s)`.
+To use any of these, pass the modified frequencies to the RoPE function from Part 9 (replace `rope_freqs(d, base)` by the modified array) and, for YaRN, multiply the rotated $q$ and $k$ by `yarn_scale(s)`.
 
 ## 4. What else a long-context model needs
 

@@ -1,13 +1,15 @@
 ---
 title: "Masks, Cross-Attention and the Original Transformer"
 subtitle: "How the encoder-decoder design works, and what decoder-only LLMs kept"
-date: 2026-11-07
+date: "2026-11-07"
+series: "Foundations of LLMs"
+part: 5
 draft: false
-categories: [LLM fundamentals, Transformers, Attention]
+categories: [llm-fundamentals, transformers, attention]
 description: "The causal mask, teacher forcing and the right shift, cross-attention, and how the original encoder-decoder Transformer became the decoder-only architecture behind modern LLMs."
 ---
 
-This is the second article on attention. The [first one](../attention-scaled-dot-product/index.qmd) built scaled dot-product attention:
+This is Part 5, the second of four articles on attention. [Part 4](../04-attention-scaled-dot-product/index.qmd) built scaled dot-product attention:
 
 $$
 \text{Attention}(Q, K, V) = \text{softmax}\!\left(\frac{QK^\top}{\sqrt{d_k}}\right)V

@@ -1,13 +1,15 @@
 ---
 title: "Multi-Head Attention: Several Views of the Same Sequence"
 subtitle: "Shapes, why the cost stays the same, what the paper measured, and what heads actually learn"
-date: 2026-11-07
+date: "2026-11-07"
+series: "Foundations of LLMs"
+part: 6
 draft: false
-categories: [LLM fundamentals, Transformers, Attention]
+categories: [llm-fundamentals, transformers, attention]
 description: "How multi-head attention splits one wide attention into several narrower ones, why that costs the same, what the original ablations showed, and how to read claims about what heads learn."
 ---
 
-This is the third article on attention. We have [scaled dot-product attention](../attention-scaled-dot-product/index.qmd) and we know how to [mask it and use it across an encoder and a decoder](../attention-masks-encoder-decoder/index.qmd). Now we answer a natural question: why does every real Transformer run attention *several times in parallel* rather than once?
+This is Part 6, the third of four articles on attention. We have [scaled dot-product attention](../04-attention-scaled-dot-product/index.qmd) and we know how to [mask it and use it across an encoder and a decoder](../05-attention-masks-encoder-decoder/index.qmd). Now we answer a natural question: why does every real Transformer run attention *several times in parallel* rather than once?
 
 ## Why one attention is not enough
 
@@ -68,7 +70,7 @@ It is natural to assume 8 heads cost 8 times as much. They do not, because each 
 
 **Compute.** Computing the scores $QK^\top$ for one head costs about $n^2 \cdot d_k$ multiply-adds. For $h$ heads that is $n^2 \cdot h \cdot d_k = n^2 \cdot d_\text{model}$, the same as one full-width head ($d_k = d_\text{model}$).
 
-So multi-head attention does not add capacity. It *partitions* the same width into $h$ independent subspaces, each with its own softmax. One thing does grow: there are now $h$ separate $n \times n$ weight matrices to hold in memory, which is part of why attention memory becomes a problem for long sequences (see the [fourth article](../attention-cost-kv-cache/index.qmd)).
+So multi-head attention does not add capacity. It *partitions* the same width into $h$ independent subspaces, each with its own softmax. One thing does grow: there are now $h$ separate $n \times n$ weight matrices to hold in memory, which is part of why attention memory becomes a problem for long sequences (see the [Part 7](../07-attention-cost-kv-cache/index.qmd)).
 
 ## An efficient implementation
 
@@ -138,7 +140,7 @@ So "different heads learn different things" has real support, but so does "many 
 - **Forgetting the output projection $W^O$.** Concatenation alone leaves the heads' outputs side by side. $W^O$ is what mixes information across heads.
 - **Assuming more heads is better.** In the paper's own ablation, 32 heads scored below 8 and 16. More heads also means a smaller $d_k$ per head.
 - **Thinking heads add parameters or compute.** At fixed $d_\text{model}$ the parameter count and the score computation are unchanged, as computed above. What grows is the number of $n \times n$ weight matrices.
-- **Over-reading single-head visualizations.** A head that looks like it tracks grammar in one example, in one layer, may behave differently elsewhere, and attention weights alone are not a faithful explanation of a model's output. See the pitfalls in the [first article](../attention-scaled-dot-product/index.qmd).
+- **Over-reading single-head visualizations.** A head that looks like it tracks grammar in one example, in one layer, may behave differently elsewhere, and attention weights alone are not a faithful explanation of a model's output. See the pitfalls in the [Part 4](../04-attention-scaled-dot-product/index.qmd).
 - **Applying the mask per head by mistake.** The same causal mask is shared by all heads; an $(n, n)$ mask broadcasts across the head dimension.
 
 ## Summary
