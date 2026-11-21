@@ -2,7 +2,11 @@
 title: "Tokenization and Byte-Pair Encoding: How LLMs Turn Text into Numbers"
 description: "Why language models don't read characters or words, how BPE builds a vocabulary by merging frequent pairs, and what that means in practice."
 date: 2026-10-31
-categories: [LLMs, tokenization, BPE, fundamentals]
+series: "Foundations of LLMs"
+part: 1
+categories: [tokenization, bpe, wordpiece]
+aliases:
+  - /posts/tokenization-bpe/index.html
 license: "CC BY-SA 4.0"
 draft: false
 ---

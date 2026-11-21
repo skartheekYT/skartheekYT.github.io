@@ -1,0 +1,160 @@
+---
+title: "Multi-Head Attention: Several Views of the Same Sequence"
+subtitle: "Shapes, why the cost stays the same, what the paper measured, and what heads actually learn"
+date: 2026-11-07
+draft: false
+categories: [LLM fundamentals, Transformers, Attention]
+description: "How multi-head attention splits one wide attention into several narrower ones, why that costs the same, what the original ablations showed, and how to read claims about what heads learn."
+---
+
+This is the third article on attention. We have [scaled dot-product attention](../attention-scaled-dot-product/index.qmd) and we know how to [mask it and use it across an encoder and a decoder](../attention-masks-encoder-decoder/index.qmd). Now we answer a natural question: why does every real Transformer run attention *several times in parallel* rather than once?
+
+## Why one attention is not enough
+
+A single attention operation gives each token **one** softmax distribution and therefore **one** weighted average of the value vectors. That average has to serve every purpose at once. Consider the word "it" in a sentence. To build a good representation, the model may want to look at the noun that "it" refers to, at the verb it is the subject of, and at a nearby punctuation mark, and these are different questions that deserve different weightings.
+
+The original paper puts the problem this way: with a single head, averaging inhibits the model's ability to attend to information from different representation subspaces at different positions (Vaswani et al., 2017). The same paper notes that self-attention relates any two positions in a constant number of operations, at the price of reduced effective resolution because attention-weighted positions are averaged, and that multi-head attention is what counteracts this effect.
+
+The idea of **multi-head attention**: run $h$ smaller attentions in parallel, each with its own learned projections (its own notion of "query", "key" and "value"), then concatenate their results and mix them with one more projection.
+
+## The formulas
+
+For head $i \in \{1, \dots, h\}$:
+
+$$
+\text{head}_i = \text{Attention}\big(X W_i^Q,\; X W_i^K,\; X W_i^V\big),
+\qquad
+\text{MultiHead}(X) = \text{Concat}(\text{head}_1, \dots, \text{head}_h)\, W^O
+$$
+
+(In self-attention the queries, keys and values all start from the same input $X$. In cross-attention the keys and values start from the encoder output instead.)
+
+| Symbol | Meaning | Value in the original paper |
+|---|---|---|
+| $n$ | number of tokens | — |
+| $d_\text{model}$ | width of the token vectors | 512 |
+| $h$ | number of heads | 8 |
+| $d_k, d_v$ | per-head query/key size and value size, $d_k = d_v = d_\text{model}/h$ | 64 |
+| $W_i^Q, W_i^K$ | per-head projections, $d_\text{model} \times d_k$ | $512 \times 64$ |
+| $W_i^V$ | per-head projection, $d_\text{model} \times d_v$ | $512 \times 64$ |
+| $W^O$ | output projection, $(h \cdot d_v) \times d_\text{model}$ | $512 \times 512$ |
+
+```{mermaid}
+flowchart TB
+  X["<b>Input X</b><br/>(n×d_model)"]
+  X --> H1["<b>Head 1</b><br/>Attention(X·W_Q1, X·W_K1, X·W_V1)<br/>(n×d_v)"]
+  X --> H2["<b>Head 2</b><br/>Attention(X·W_Q2, X·W_K2, X·W_V2)<br/>(n×d_v)"]
+  X --> HH["<b>Head h</b><br/>Attention(X·W_Qh, X·W_Kh, X·W_Vh)<br/>(n×d_v)"]
+  H1 --> C["<b>Concat</b><br/>(n×h·d_v)"]
+  H2 --> C
+  HH --> C
+  C --> O["<b>Output projection</b><br/>Concat · W_O (n×d_model)"]
+```
+
+Follow the shapes with $d_\text{model} = 512$ and $h = 8$:
+
+1. Each head projects $X$ ($n \times 512$) down to $n \times 64$ queries, keys and values.
+2. Each head computes its own $n \times n$ attention weights and produces an $n \times 64$ output.
+3. Concatenating 8 outputs of width 64 gives $n \times 512$ again.
+4. $W^O$ ($512 \times 512$) mixes the heads' outputs, giving the layer's final $n \times 512$ output.
+
+The output has the same shape as the input, so layers can be stacked.
+
+## Why the cost stays the same
+
+It is natural to assume 8 heads cost 8 times as much. They do not, because each head works in a space $h$ times *smaller*. The paper states that, due to the reduced dimension of each head, the total computational cost is similar to single-head attention with full dimensionality (Vaswani et al., 2017). Here is the arithmetic.
+
+**Parameters.** One head has three projections of $512 \times 64$, i.e. $3 \cdot 512 \cdot 64 = 98{,}304$ weights. Eight heads: $786{,}432$. Add $W^O$ ($512 \times 512 = 262{,}144$) for a total of $1{,}048{,}576 = 4 \cdot 512^2$. A single full-width head would use three $512 \times 512$ matrices plus the same output matrix: exactly the same count.
+
+**Compute.** Computing the scores $QK^\top$ for one head costs about $n^2 \cdot d_k$ multiply-adds. For $h$ heads that is $n^2 \cdot h \cdot d_k = n^2 \cdot d_\text{model}$, the same as one full-width head ($d_k = d_\text{model}$).
+
+So multi-head attention does not add capacity. It *partitions* the same width into $h$ independent subspaces, each with its own softmax. One thing does grow: there are now $h$ separate $n \times n$ weight matrices to hold in memory, which is part of why attention memory becomes a problem for long sequences (see the [fourth article](../attention-cost-kv-cache/index.qmd)).
+
+## An efficient implementation
+
+In practice you do not loop over heads. You project once with full-width matrices and then *reshape* the result so that each head gets its own slice of the columns:
+
+```python
+import numpy as np
+
+def softmax(z, axis=-1):
+    z = z - z.max(axis=axis, keepdims=True)
+    e = np.exp(z)
+    return e / e.sum(axis=axis, keepdims=True)
+
+def multi_head_attention(X, W_Q, W_K, W_V, W_O, h, mask=None):
+    n, d_model = X.shape
+    d_k = d_model // h                                  # d_model must be divisible by h
+
+    def split(M):                                       # (n, d_model) -> (h, n, d_k)
+        return M.reshape(n, h, d_k).transpose(1, 0, 2)
+
+    Q, K, V = split(X @ W_Q), split(X @ W_K), split(X @ W_V)
+    scores = Q @ K.transpose(0, 2, 1) / np.sqrt(d_k)    # (h, n, n): one score matrix per head
+    if mask is not None:
+        scores = scores + mask                          # an (n, n) mask broadcasts over heads
+    A = softmax(scores, axis=-1)
+    heads = A @ V                                       # (h, n, d_k)
+    concat = heads.transpose(1, 0, 2).reshape(n, d_model)   # (n, h * d_k)
+    return concat @ W_O, A                              # (n, d_model)
+```
+
+Head $i$ simply uses columns $i \cdot d_k$ to $(i+1) \cdot d_k - 1$ of each big projection matrix. We checked this against an explicit per-head loop with random weights ($n = 5$, $d_\text{model} = 512$, $h = 8$) and the outputs match.
+
+## What the paper measured
+
+The authors varied the number of heads while keeping the amount of computation constant (so more heads means a smaller $d_k$ and $d_v$), and measured English-to-German translation on a development set (Vaswani et al., 2017, Table 3, rows A and B):
+
+| Setting | Heads $h$ | $d_k = d_v$ | Perplexity (dev) | BLEU (dev) |
+|---|---|---|---|---|
+| base model | 8 | 64 | 4.92 | 25.8 |
+| (A) | 1 | 512 | 5.29 | 24.9 |
+| (A) | 4 | 128 | 5.00 | 25.5 |
+| (A) | 16 | 32 | 4.91 | 25.8 |
+| (A) | 32 | 16 | 5.01 | 25.4 |
+| (B) | 8 | $d_k = 16$ | 5.16 | 25.1 |
+| (B) | 8 | $d_k = 32$ | 5.01 | 25.4 |
+
+(Perplexity: lower is better. BLEU: a translation-quality score, higher is better. In rows B only the key size $d_k$ is reduced.)
+
+The paper's reading: single-head attention is 0.9 BLEU worse than the best setting, and quality also drops with too many heads; reducing the key size $d_k$ hurts, which the authors take to suggest that judging compatibility is not easy and a more sophisticated compatibility function than a dot product might help.
+
+Two cautions when quoting these numbers. They come from one translation task and one model size, and the table reports single runs with no variance, so differences of a few tenths of a BLEU point are hard to interpret. The solid message is the larger one: one wide head is clearly worse than a moderate number of narrower heads, and there is a sweet spot rather than "more is always better".
+
+## What do heads actually learn?
+
+The paper's appendix visualizes attention weights from layer 5 of 6 in the encoder. The authors describe many heads as attending to a long-distance dependency (the verb "making" attending to "more difficult"), two heads as "apparently involved in anaphora resolution" (the word "its" pointing back at "Law" and "application"), and others as showing behaviour that appears related to sentence structure, concluding that different heads learned different tasks (Vaswani et al., 2017). These are hand-picked qualitative examples from one layer of one model, and the wording is deliberately hedged.
+
+Later work gives a more detailed picture, in translation models:
+
+- Voita et al. (2019) found that a small number of heads with identifiable roles (attending to adjacent positions, to syntactic relations, or to rare words) did most of the work, and that most of the other heads could be pruned with little loss in quality.
+- Michel et al. (2019) found that a large share of heads can be removed at test time without significantly hurting performance, and that some layers can even be reduced to a single head. They also found that the encoder-decoder (cross) attention layers depend more on having multiple heads than self-attention layers do.
+
+So "different heads learn different things" has real support, but so does "many heads are redundant". Both facts are consistent with the heads being a flexible budget rather than a set of hand-designed experts.
+
+## Common pitfalls
+
+- **$d_\text{model}$ must be divisible by $h$.** Otherwise $d_k = d_\text{model}/h$ is not an integer and the reshape fails.
+- **Forgetting the output projection $W^O$.** Concatenation alone leaves the heads' outputs side by side. $W^O$ is what mixes information across heads.
+- **Assuming more heads is better.** In the paper's own ablation, 32 heads scored below 8 and 16. More heads also means a smaller $d_k$ per head.
+- **Thinking heads add parameters or compute.** At fixed $d_\text{model}$ the parameter count and the score computation are unchanged, as computed above. What grows is the number of $n \times n$ weight matrices.
+- **Over-reading single-head visualizations.** A head that looks like it tracks grammar in one example, in one layer, may behave differently elsewhere, and attention weights alone are not a faithful explanation of a model's output. See the pitfalls in the [first article](../attention-scaled-dot-product/index.qmd).
+- **Applying the mask per head by mistake.** The same causal mask is shared by all heads; an $(n, n)$ mask broadcasts across the head dimension.
+
+## Summary
+
+- Multi-head attention runs $h$ attentions in parallel, each in a $d_k = d_\text{model}/h$ dimensional subspace, then concatenates and mixes them with $W^O$.
+- Parameters and score computation match one full-width head; the number of attention matrices is $h$ times larger.
+- In the original ablations, one head was 0.9 BLEU worse than the best setting, and too many heads also hurt.
+- Heads show some specialization, but studies of trained translation models find many heads are removable.
+
+## References
+
+- Vaswani, A., et al. (2017). *Attention Is All You Need.* NeurIPS 2017. [arXiv:1706.03762](https://arxiv.org/abs/1706.03762).
+- Voita, E., Talbot, D., Moiseev, F., Sennrich, R., Titov, I. (2019). *Analyzing Multi-Head Self-Attention: Specialized Heads Do the Heavy Lifting, the Rest Can Be Pruned.* ACL 2019. [arXiv:1905.09418](https://arxiv.org/abs/1905.09418).
+- Michel, P., Levy, O., Neubig, G. (2019). *Are Sixteen Heads Really Better than One?* NeurIPS 2019. [arXiv:1905.10650](https://arxiv.org/abs/1905.10650).
+- Roitman, H. *The Hitchhiker's Guide to Agentic AI: From Foundations to Systems.* [arXiv:2606.24937](https://arxiv.org/abs/2606.24937).
+
+---
+
+This work adapts material from "The Hitchhiker's Guide to Agentic AI" by Haggai Roitman (arXiv:2606.24937v3, book version 1.4), licensed under CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/). Changes: adapted into standalone articles, with added explanations, diagrams and examples. This work is licensed under CC BY-SA 4.0.

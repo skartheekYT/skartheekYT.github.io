@@ -3,7 +3,11 @@ title: "Companion: Deriving the Whitening Matrix"
 description: "Step-by-step derivation of the Whitening Matrix (W), the Whitening-k truncation, and exact streaming updates for the mean and covariance."
 date: "2026-11-01"
 draft: false
-categories: [llm, embeddings, math]
+series: "Foundations of LLMs"
+companion: true
+categories: [embeddings, linear-algebra, math]
+aliases:
+  - /posts/anisotropy-whitening/derivation.html
 ---
 
 This page is a companion to [Anisotropy and Whitening](index.qmd). It derives the whitening matrix and a few facts the main article uses. It assumes basic linear algebra (matrix product, transpose, eigendecomposition).

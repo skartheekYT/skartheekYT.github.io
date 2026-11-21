@@ -4,14 +4,46 @@ project:
 website:
   title: "Agentic AI Notes"
   draft-mode: gone
+  page-navigation: true
   navbar:
     left:
       - href: index.qmd
         text: Home
-      - href: blog.qmd
+      - href: series.qmd
+        text: Series
+      - href: articles.qmd
         text: Articles
       - href: about.qmd
         text: About
+    right:
+      - icon: linkedin
+        href: https://www.linkedin.com/in/kartheek-saradhi/
+        aria-label: LinkedIn
+
+  # One sidebar per series. Pages outside every sidebar's contents get no sidebar.
+  sidebar:
+    - id: foundations-of-llms
+      title: "Foundations of LLMs"
+      style: docked
+      contents:
+        - href: series/foundations-of-llms/index.qmd
+          text: "Overview"
+        - section: "1. Tokenization & BPE"
+          href: series/foundations-of-llms/01-tokenization-bpe/index.qmd
+          contents:
+            - series/foundations-of-llms/01-tokenization-bpe/wordpiece-likelihood-proof.qmd
+        - section: "2. Token IDs to Vectors"
+          href: series/foundations-of-llms/02-embeddings-token-vectors/index.qmd
+        - section: "3. Anisotropy & Whitening"
+          href: series/foundations-of-llms/03-anisotropy-whitening/index.qmd
+          contents:
+            - series/foundations-of-llms/03-anisotropy-whitening/derivation.qmd
+            - series/foundations-of-llms/03-anisotropy-whitening/mev-derivation.qmd
+        - section: "4. Scaled Dot-Product Attention"
+          href: series/foundations-of-llms/04-attention-scaled-dot-product/index.qmd
+        - section: "5. Transformer"
+          href: series/foundations-of-llms/05-attention-masks-encoder-decoder/index.qmd
+
   page-footer: "Content licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)"
 
 format:
@@ -19,3 +51,7 @@ format:
     theme: cosmo
     css: styles.css
     toc: true
+    grid:
+      sidebar-width: 320px
+      body-width: 850px
+      margin-width: 320px

@@ -1,0 +1,13 @@
+---
+title: "Articles"
+description: ""
+aliases:
+  - /blog.html
+listing:
+  contents: "series/*/*/index.qmd"
+  sort: ["date desc", "part desc"]
+  type: default
+  fields: [date, title, description, series]
+---
+
+All articles, newest first. To read a topic from the beginning, start from [Series](series.qmd) instead.

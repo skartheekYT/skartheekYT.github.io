@@ -3,12 +3,16 @@ title: "From Token IDs to Vectors: How LLMs Embed Text"
 description: "What the embedding layer actually is, where its vectors come from, how weight tying works, and why the geometry of embeddings matters."
 date: "2026-11-01"
 draft: false
-categories: [llm, embeddings, transformers]
+series: "Foundations of LLMs"
+part: 2
+categories: [embeddings, transformers]
+aliases:
+  - /posts/embeddings-token-vectors/index.html
 ---
 
 A transformer cannot read text, and it can't do much with integers either. Before any attention happens, every token ID must be converted into a vector of real numbers that capture its underlying meaning. This article covers that first step: what the **embedding layer** is, where its numbers come from, and why the *shape* of the resulting vector space matters for things like retrieval.
 
-This is the follow-up to the [tokenization article](../tokenization-bpe/index.qmd), which ended at the point where text has become a sequence of integer token IDs.
+This is the follow-up to the [tokenization article](../01-tokenization-bpe/index.qmd), which ended at the point where text has become a sequence of integer token IDs.
 
 ## Why IDs are not enough
 
@@ -123,7 +127,7 @@ $$
 
 Keeping only the first $k$ columns of $\mathbf{W}$ also shrinks the vectors, which speeds up retrieval. In their experiments on sentence embeddings from BERT (whitening statistics fitted on the unlabeled evaluation sentences), this improved similarity scores on several benchmarks, for example STS-B Spearman correlation 59.04 → 71.34 for BERT-base, and a 768 → 256 dimension cut scored about the same (71.43). Gains are not uniform across datasets; the deep-dive article shows where it did not help.
 
-To dive deeper, see the next article, [Anisotropy and Whitening](../anisotropy-whitening/index.qmd). It covers how isotropy is measured, what Ethayarajh's experiments show, the derivation of $\mathbf{W}$, the dimensionality-reduction trade-off, and a runnable demo.
+To dive deeper, see the next article, [Anisotropy and Whitening](../03-anisotropy-whitening/index.qmd). It covers how isotropy is measured, what Ethayarajh's experiments show, the derivation of $\mathbf{W}$, the dimensionality-reduction trade-off, and a runnable demo.
 
 ## Code: lookup, one-hot equivalence, weight tying
 

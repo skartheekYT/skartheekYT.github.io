@@ -1,0 +1,239 @@
+---
+title: "The Cost of Attention: n², the KV Cache, GQA and MLA"
+subtitle: "Why long contexts are expensive, and the main ideas for making them cheaper"
+date: 2026-11-07
+draft: false
+categories: [LLM fundamentals, Transformers, Attention, Inference]
+description: "Where attention's quadratic cost comes from, what the KV cache is and how big it gets, how GQA and MLA shrink it, and a map of the long-context fixes (FlashAttention, sliding windows, sparse and linear attention, cache eviction)."
+---
+
+This is the fourth and last article of this attention set. We know how [attention works](../attention-scaled-dot-product/index.qmd), how it is [masked](../attention-masks-encoder-decoder/index.qmd), and how [multiple heads](../multi-head-attention/index.qmd) share the work. Now the bill: what does attention cost, and what do real systems do about it?
+
+There are two *different* problems hiding under "attention is expensive", and mixing them up is the most common source of confusion:
+
+1. **The $n^2$ score matrix**: a *compute and temporary-memory* problem, mainly when processing many tokens at once.
+2. **The KV cache**: a *persistent-memory* problem, growing with every generated token.
+
+## Problem 1: the $n^2$ score matrix
+
+For a sequence of $n$ tokens, the scores $QK^\top$ form an $n \times n$ matrix: every token against every token. Per layer, per head:
+
+- **Time:** $O(n^2 \cdot d_k)$ multiply-adds to compute the scores (and the same order again to apply them to $V$).
+- **Memory:** $O(n^2)$ to hold the score matrix if you store it.
+
+Note that the *size* of the matrix depends only on $n$, not on the model width. Here is how many entries it has, and how much memory that is for one head in one layer (binary units: 1 GiB = $2^{30}$ bytes):
+
+| Sequence length | $n^2$ entries | FP32 (4 bytes each) | FP16 (2 bytes each) |
+|---|---|---|---|
+| 2K (2,048) | 4.2 million | 16 MiB | 8 MiB |
+| 8K (8,192) | 67 million | 256 MiB | 128 MiB |
+| 32K (32,768) | 1.07 billion | 4 GiB | 2 GiB |
+| 128K (131,072) | 17.2 billion | 64 GiB | 32 GiB |
+| 1M (1,048,576) | 1.1 trillion | 4 TiB | 2 TiB |
+
+Doubling the context quadruples the cost. And these numbers are *per head*; a model has many heads (and the same again in every layer), though layers run one after another, so only one layer's matrices need to exist at a time. A naive implementation that stores the full matrix simply cannot reach long contexts.
+
+## Two phases of LLM inference
+
+When an LLM answers a prompt, it works in two phases:
+
+- **Prefill:** the whole prompt is processed in one parallel pass (with the causal mask). This is where the $n^2$ matrix appears.
+- **Decode:** tokens are then generated *one at a time*. Each new token needs attention over everything before it, but only one new query row, so there is no big square matrix. What dominates now is the cost of *remembering* the past. That is the KV cache.
+
+## Problem 2: the KV cache
+
+To generate token $t+1$, the model computes a query for the new position and compares it with the **keys** of tokens $1, \dots, t$, then takes a weighted sum of their **values**. The key and value vectors of earlier tokens do not change as generation proceeds, because with a causal mask a token's representation never depends on later tokens. So we compute them once and **store** them. That stored collection is the **KV cache**.
+
+Precisely, for every layer, every key/value head, and every token so far, the cache holds one key vector and one value vector (each of size $d_\text{head}$). What is *not* cached is the query: each query is used exactly once, for its own step, and then discarded.
+
+```{mermaid}
+flowchart LR
+  T["<b>New token x_t</b>"] --> P["<b>Project</b><br/>q_t, k_t, v_t"]
+  P -->|"append k_t, v_t"| C[("<b>KV cache</b><br/>k_1…k_t, v_1…v_t<br/>per layer, per KV head")]
+  P -->|"q_t (used once)"| A["<b>Attention</b><br/>softmax(q_t·Kᵀ/√d_k)·V"]
+  C -->|"all cached K, V"| A
+  A --> N["<b>Next-token<br/>prediction</b>"]
+```
+
+Here is a minimal version for one head and one layer. The loop that reuses the cache produces exactly the same outputs as one full pass with a causal mask (we verified this numerically):
+
+```python
+import numpy as np
+
+def softmax(z, axis=-1):
+    z = z - z.max(axis=axis, keepdims=True)
+    e = np.exp(z)
+    return e / e.sum(axis=axis, keepdims=True)
+
+rng = np.random.default_rng(0)
+n, d, d_k = 6, 16, 8
+X = rng.standard_normal((n, d))
+W_Q, W_K, W_V = (rng.standard_normal((d, d_k)) / np.sqrt(d) for _ in range(3))
+
+# (a) one full pass with a causal mask
+Q, K, V = X @ W_Q, X @ W_K, X @ W_V
+M = np.triu(np.full((n, n), -np.inf), k=1)
+full = softmax(Q @ K.T / np.sqrt(d_k) + M) @ V
+
+# (b) token by token, with a KV cache
+k_cache, v_cache, outs = [], [], []
+for t in range(n):
+    x_t = X[t]
+    q_t = x_t @ W_Q                        # the query is used once and thrown away
+    k_cache.append(x_t @ W_K)              # keys and values are appended and reused
+    v_cache.append(x_t @ W_V)
+    K_t, V_t = np.stack(k_cache), np.stack(v_cache)    # (t+1, d_k)
+    w = softmax(q_t @ K_t.T / np.sqrt(d_k))            # (t+1,)
+    outs.append(w @ V_t)
+
+print(np.allclose(full, np.stack(outs)))   # True
+```
+
+### How big is the cache?
+
+Per token, the cache stores $2$ (key and value) $\times$ $L$ layers $\times$ $n_\text{kv}$ KV heads $\times$ $d_\text{head}$ numbers:
+
+$$
+\text{cache bytes} = 2 \cdot L \cdot n_\text{kv} \cdot d_\text{head} \cdot \text{bytes per number} \cdot (\text{tokens}) \cdot (\text{batch size})
+$$
+
+Take a 7B to 8B-class configuration (as in Mistral 7B and Llama-3-8B): $L = 32$ layers, 32 query heads, $d_\text{head} = 128$, FP16 (2 bytes). With standard multi-head attention (32 KV heads) that is 512 KiB per token. With 8 KV heads, 128 KiB per token:
+
+| Context length | 32 KV heads (standard MHA) | 8 KV heads (GQA) |
+|---|---|---|
+| 8K tokens | 4 GiB | 1 GiB |
+| 128K tokens | 64 GiB | 16 GiB |
+
+And that is for *one* sequence. Serving $B$ requests at once multiplies it by $B$. The cache grows linearly with context, but at long contexts and large batches it can rival the model weights in memory use. Since decoding is typically limited by how fast memory can be read, not by arithmetic, a smaller cache also means faster generation.
+
+## Shrinking the cache by sharing heads: MQA and GQA
+
+The cache size is proportional to the number of **KV heads**. Standard multi-head attention gives every query head its own key and value head. Two ideas share them:
+
+- **Multi-query attention (MQA)** (Shazeer, 2019): *all* query heads share a single KV head.
+- **Grouped-query attention (GQA)** (Ainslie et al., 2023): an in-between setting. With $h$ query heads and $g$ KV heads ($1 < g < h$), each KV head is shared by a *group* of $h/g$ query heads.
+
+```{mermaid}
+flowchart LR
+  subgraph QH["Query heads (h = 4)"]
+    Q1["Q head 1"]
+    Q2["Q head 2"]
+    Q3["Q head 3"]
+    Q4["Q head 4"]
+  end
+  subgraph KVH["KV heads (g = 2)"]
+    KV1["KV head 1<br/>(K₁, V₁)"]
+    KV2["KV head 2<br/>(K₂, V₂)"]
+  end
+  Q1 --> KV1
+  Q2 --> KV1
+  Q3 --> KV2
+  Q4 --> KV2
+```
+
+| Variant | KV heads | Cache vs. standard MHA |
+|---|---|---|
+| MHA | $h$ | $1\times$ |
+| GQA | $g$ | $g/h$ |
+| MQA | 1 | $1/h$ |
+
+With 32 query heads and 8 KV heads, each KV head serves 4 query heads and the cache is 4 times smaller (the table above). The number of *query* heads is unchanged, so the score computation is the same; the savings are in cache memory and in the data read per decoding step.
+
+In code, GQA is just sharing: compute fewer K and V heads, then repeat each across its group before attending:
+
+```python
+h, g = 8, 2                                      # 8 query heads, 2 KV heads
+Qh = ...                                         # (h, n, d_k)
+Kg, Vg = ...                                     # (g, n, d_k): only g sets are computed and cached
+Kh = np.repeat(Kg, h // g, axis=0)               # (h, n, d_k): heads 0-3 share KV head 0, heads 4-7 share KV head 1
+Vh = np.repeat(Vg, h // g, axis=0)
+out = softmax(Qh @ Kh.transpose(0, 2, 1) / np.sqrt(d_k) + M) @ Vh
+```
+
+The GQA paper reports that GQA reaches quality close to standard multi-head attention with speed comparable to MQA, and proposes converting an existing multi-head checkpoint by mean-pooling its key and value heads and then training briefly (about 5% of the original pre-training compute). Its experiments used T5 encoder-decoder models, so the exact numbers should not be assumed to transfer unchanged to every decoder-only LLM.
+
+## Shrinking the cache by compression: MLA
+
+GQA reduces the cache by having *fewer* KV heads. **Multi-head Latent Attention (MLA)**, introduced with DeepSeek-V2 (DeepSeek-AI, 2024), keeps the full number of heads but compresses what is stored. For each token, the keys and values are jointly compressed into one small **latent vector** $c_t$:
+
+$$
+c_t = W^{DKV} h_t, \qquad K_t = W^{UK} c_t, \qquad V_t = W^{UV} c_t
+$$
+
+Here $h_t$ is the token's hidden vector, $W^{DKV}$ is a learned *down*-projection to a small size $d_c$, and $W^{UK}$, $W^{UV}$ are learned *up*-projections that expand the latent back into per-head keys and values. Only $c_t$ is cached, not $K_t$ and $V_t$.
+
+- **What is actually cached.** The paper adds a small extra "decoupled" key that carries positional information (rotary position embeddings, covered in the positional-encoding article), so the per-token cache is the latent plus that small key, not the latent alone.
+- **Scale.** DeepSeek-V2 uses 128 heads of size 128 and a latent size $d_c = 512$. Standard attention would cache $2 \times 128 \times 128 = 32{,}768$ numbers per token per layer for keys and values; the latent is 512 (plus the small positional key). The paper reports a 93.3% smaller KV cache and 5.76 times higher maximum generation throughput compared with their earlier DeepSeek 67B model; that comparison is between two different models, so it is not a pure measurement of MLA against standard attention.
+- **Quality.** The authors report that MLA matches or beats standard multi-head attention in their experiments, whereas MQA and GQA trade away some quality for their savings.
+- **No free lunch.** Reconstructing keys and values costs extra computation. The paper notes that at inference the up-projection matrices can be folded into the query and output projections, so full keys and values need not be explicitly built.
+
+| Variant | Cached per token, per layer |
+|---|---|
+| MHA | $2 \cdot h \cdot d_\text{head}$ |
+| GQA | $2 \cdot g \cdot d_\text{head}$ |
+| MQA | $2 \cdot d_\text{head}$ |
+| MLA | $d_c$ + a small positional key |
+
+## Taming the $n^2$ cost: a map of the main ideas
+
+These address problem 1 (and sometimes problem 2). Each deserves its own deep dive; the goal here is intuition.
+
+**1. FlashAttention: compute the same thing, move less data.** FlashAttention (Dao et al., 2022) is an *exact* algorithm, not an approximation. GPUs have a large but slow main memory (HBM) and a tiny but very fast on-chip memory (SRAM). Standard attention writes the whole $n \times n$ matrix to HBM and reads it back several times. FlashAttention processes the matrices in tiles that fit in SRAM, updating the softmax incrementally, so the full matrix is never written to HBM. The paper reports memory that is linear in sequence length and large wall-clock speedups. The number of arithmetic operations is *not* reduced (the backward pass even recomputes some values); the win is fewer memory reads and writes, which is what limits attention in practice.
+
+**2. Sliding-window (local) attention: look only nearby.** Each token attends to only the previous $w$ tokens, so cost is $O(n \cdot w)$, linear in $n$. Longformer (Beltagy et al., 2020) and Mistral 7B (Jiang et al., 2023, window 4,096) use this. Information can still travel further, because each layer lets a token see $w$ positions back from tokens that themselves already saw $w$ positions back; in principle after $L$ layers the reach is about $L \cdot w$, but that indirect path is weaker than direct attention.
+
+**3. Sparse patterns: local plus a few long-range links.** Combine a local window with a few *global* tokens that attend to (and are attended by) everything. BigBird (Zaheer et al., 2020) adds random links and reports cost linear in sequence length. The earlier Sparse Transformer (Child et al., 2019) reduced the cost to $O(n\sqrt{n})$.
+
+**4. Linear attention and state-space models: change the math.** Without the softmax, $(\phi(Q)\phi(K)^\top)V$ can be regrouped by associativity as $\phi(Q)\,(\phi(K)^\top V)$. The small matrix $\phi(K)^\top V$ is computed once, giving cost linear in $n$. Models such as Mamba (Gu & Dao, 2023) and RWKV (Peng et al., 2023) follow this recurrent-style direction. These are different architectures rather than drop-in replacements, and results vary on tasks that need precise recall of specific earlier tokens, so they are usually evaluated carefully against full attention.
+
+**5. KV-cache compression and eviction: remember less.** Keep the cache bounded by dropping or shrinking entries. H2O (Zhang et al., 2023) keeps the tokens that have received the most attention plus recent ones. StreamingLLM (Xiao et al., 2023) keeps the first few "attention sink" tokens plus a recent window. Quantized caches store keys and values in lower precision.
+
+| Idea | What it changes | Compute as $n$ grows | Trade-off |
+|---|---|---|---|
+| FlashAttention | how attention is computed | still $O(n^2)$, but far less memory traffic | none in the math; needs a specialized kernel |
+| Sliding window | which scores exist | $O(n \cdot w)$ | no direct access beyond the window |
+| Sparse patterns | which scores exist | about linear (BigBird) | a fixed pattern may miss needed links |
+| Linear attention / SSMs | the attention math itself | linear | a different model family; recall trade-offs |
+| Cache eviction / quantization | what is stored | bounded cache | may discard information that is needed later |
+| GQA / MLA | how many K, V are stored | scores unchanged | small quality trade-offs (GQA) or extra compute (MLA) |
+
+A useful way to keep these straight: *masks and sparsity decide which scores exist; FlashAttention decides how the existing scores are computed; GQA, MLA and eviction decide what is remembered between steps.* FlashAttention composes with masks such as sliding windows rather than competing with them.
+
+## Common pitfalls
+
+- **Saying FlashAttention "reduces the complexity".** It is exact attention with the same $O(n^2)$ arithmetic; it reduces memory traffic and avoids storing the $n \times n$ matrix.
+- **Quoting the score-matrix size without "per head, per layer"**, or tying it to the model width. It depends only on $n$ (and the number of bytes per entry).
+- **Confusing the two problems.** The $n^2$ matrix is transient and mainly a prefill problem. The KV cache is persistent and grows with every generated token and every concurrent request.
+- **Caching queries, or thinking the cache stores text.** The cache holds keys and values (per layer, per KV head), not queries and not tokens.
+- **Forgetting layers and batch size** in cache estimates. Memory scales with $L \times n_\text{kv} \times d_\text{head} \times \text{tokens} \times \text{batch}$.
+- **Reading GQA as "fewer attention heads".** The number of query heads stays the same; only the number of distinct key/value heads shrinks.
+- **Treating MLA as GQA with a different name.** MLA keeps all heads and stores a compressed latent from which keys and values are rebuilt.
+- **Mixing units.** GB (powers of 10) and GiB (powers of 2) differ by about 7%, which matters at the 64 GiB scale.
+
+## Summary
+
+- Attention's score matrix is $n \times n$ per head per layer, so time and naive memory grow quadratically with context.
+- The KV cache stores each layer's keys and values for all past tokens, so decoding does not recompute them. Its size grows linearly with context, layers, KV heads and batch.
+- GQA shrinks the cache by sharing KV heads across groups of query heads; MLA shrinks it by caching a low-rank latent per token.
+- FlashAttention makes exact attention fast and memory-light; sliding windows, sparse patterns, linear attention and cache eviction trade some generality for lower cost.
+
+## References
+
+- Vaswani, A., et al. (2017). *Attention Is All You Need.* [arXiv:1706.03762](https://arxiv.org/abs/1706.03762).
+- Shazeer, N. (2019). *Fast Transformer Decoding: One Write-Head is All You Need.* [arXiv:1911.02150](https://arxiv.org/abs/1911.02150).
+- Ainslie, J., Lee-Thorp, J., de Jong, M., Zemlyanskiy, Y., Lebrón, F., Sanghai, S. (2023). *GQA: Training Generalized Multi-Query Transformer Models from Multi-Head Checkpoints.* EMNLP 2023. [arXiv:2305.13245](https://arxiv.org/abs/2305.13245).
+- DeepSeek-AI (2024). *DeepSeek-V2: A Strong, Economical, and Efficient Mixture-of-Experts Language Model.* [arXiv:2405.04434](https://arxiv.org/abs/2405.04434).
+- Dao, T., Fu, D. Y., Ermon, S., Rudra, A., Ré, C. (2022). *FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness.* NeurIPS 2022. [arXiv:2205.14135](https://arxiv.org/abs/2205.14135).
+- Beltagy, I., Peters, M. E., Cohan, A. (2020). *Longformer: The Long-Document Transformer.* [arXiv:2004.05150](https://arxiv.org/abs/2004.05150).
+- Jiang, A. Q., et al. (2023). *Mistral 7B.* [arXiv:2310.06825](https://arxiv.org/abs/2310.06825).
+- Child, R., Gray, S., Radford, A., Sutskever, I. (2019). *Generating Long Sequences with Sparse Transformers.* [arXiv:1904.10509](https://arxiv.org/abs/1904.10509).
+- Zaheer, M., et al. (2020). *Big Bird: Transformers for Longer Sequences.* NeurIPS 2020. [arXiv:2007.14062](https://arxiv.org/abs/2007.14062).
+- Gu, A., Dao, T. (2023). *Mamba: Linear-Time Sequence Modeling with Selective State Spaces.* [arXiv:2312.00752](https://arxiv.org/abs/2312.00752).
+- Peng, B., et al. (2023). *RWKV: Reinventing RNNs for the Transformer Era.* [arXiv:2305.13048](https://arxiv.org/abs/2305.13048).
+- Zhang, Z., et al. (2023). *H2O: Heavy-Hitter Oracle for Efficient Generative Inference of Large Language Models.* [arXiv:2306.14048](https://arxiv.org/abs/2306.14048).
+- Xiao, G., et al. (2023). *Efficient Streaming Language Models with Attention Sinks.* [arXiv:2309.17453](https://arxiv.org/abs/2309.17453).
+- Roitman, H. *The Hitchhiker's Guide to Agentic AI: From Foundations to Systems.* [arXiv:2606.24937](https://arxiv.org/abs/2606.24937).
+
+---
+
+This work adapts material from "The Hitchhiker's Guide to Agentic AI" by Haggai Roitman (arXiv:2606.24937v3, book version 1.4), licensed under CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/). Changes: adapted into standalone articles, with added explanations, diagrams and examples. This work is licensed under CC BY-SA 4.0.

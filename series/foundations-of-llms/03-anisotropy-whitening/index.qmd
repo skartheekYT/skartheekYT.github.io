@@ -3,12 +3,16 @@ title: "Anisotropy and Whitening: Fixing the Geometry of Embeddings"
 description: "What anisotropy is, what the evidence says about BERT, ELMo and GPT-2, and how whitening (and Whitening-k) reshapes embeddings for similarity search."
 date: "2026-11-01"
 draft: false
-categories: [llm, embeddings, retrieval]
+series: "Foundations of LLMs"
+part: 3
+categories: [embeddings, retrieval, linear-algebra]
+aliases:
+  - /posts/anisotropy-whitening/index.html
 ---
 
 Embeddings are used through geometry: nearest neighbours, clusters, cosine scores. That only works if the geometry is well behaved. This article explains one specific way it often is not (**anisotropy**), what the research found about it in popular models, and a simple linear fix (**whitening**) with its dimensionality-reduction variant.
 
-It builds on [From Token IDs to Vectors](../embeddings-token-vectors/index.qmd), which introduced embeddings and cosine similarity. The algebra behind the whitening matrix is in a [companion derivation page](derivation.qmd).
+It builds on [From Token IDs to Vectors](../02-embeddings-token-vectors/index.qmd), which introduced embeddings and cosine similarity. The algebra behind the whitening matrix is in a [companion derivation page](derivation.qmd).
 
 ## What cosine similarity quietly assumes
 

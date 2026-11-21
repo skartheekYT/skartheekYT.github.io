@@ -1,7 +1,20 @@
 ---
 title: "Agentic AI Notes"
+listing:
+  contents: "series/*/*/index.qmd"
+  sort: ["date desc", "part desc"]
+  type: default
+  max-items: 3
+  fields: [date, title, description]
+  sort-ui: false
+  filter-ui: false
+toc: false
 ---
 
-Notes on LLMs and agentic AI, written while working through *The Hitchhiker's Guide to Agentic AI* by Haggai Roitman. Each article is self-contained, intuition first, with the math explained.
+I'm a software engineer catching up on LLMs and agentic AI, and learning in public. These notes are written while working through *The Hitchhiker's Guide to Agentic AI* by Haggai Roitman. Each article is self-contained and starts from intuition, with the math worked out.
 
-See the [articles](blog.qmd).
+**Start here:** [Foundations of LLMs](series/foundations-of-llms/index.qmd), the first series.
+
+Or browse [all articles](articles.qmd).
+
+## Latest articles

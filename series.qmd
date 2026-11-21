@@ -1,0 +1,12 @@
+---
+title: "Series"
+description: ""
+listing:
+  contents: "series/*/index.qmd"
+  type: grid
+  fields: [title]
+  sort-ui: false
+  filter-ui: false
+---
+
+Each series is a sequence of articles meant to be read in order. New series get added here as I study new topics.

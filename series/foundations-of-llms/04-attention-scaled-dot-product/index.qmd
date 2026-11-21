@@ -1,0 +1,245 @@
+---
+title: "Scaled Dot-Product Attention, Step by Step"
+subtitle: "Queries, keys, values, and why we divide by √d_k"
+date: 2026-11-07
+draft: false
+categories: [LLM fundamentals, Transformers, Attention]
+description: "How a token builds a new representation as a weighted mix of all the tokens around it: the intuition, the shapes, a worked example, and the reason for the √d_k scaling."
+---
+
+This is the first of four articles on attention. After [tokenization](../tokenization-bpe/index.qmd) and embeddings, every token is a vector. Attention is the operation that lets those vectors talk to each other, and it is the core of every Transformer. The next articles cover [masking, encoder-decoder and cross-attention](../attention-masks-encoder-decoder/index.qmd), [multi-head attention](../multi-head-attention/index.qmd), and [the cost of attention (KV cache, GQA, MLA)](../attention-cost-kv-cache/index.qmd).
+
+## The problem attention solves
+
+After the embedding layer, the word "bank" has the same vector in "river bank" and in "bank account". The vector knows nothing about its neighbours. A language model needs each token's representation to be *updated using the other tokens in the sequence*.
+
+Attention does exactly this, with one idea:
+
+> Each token builds its new vector as a **weighted average of information from all tokens**, where the weights are computed from the content itself.
+
+A recurrent network passes information along the sequence one step at a time. Attention instead lets every position look at every other position directly. This is the design the original Transformer paper (Vaswani et al., 2017) proposed: an architecture built on attention alone, with no recurrence and no convolutions.
+
+## Intuition: a soft dictionary lookup
+
+A Python dictionary does a *hard* lookup: the query must match a key exactly, and you get back one value.
+
+```python
+d = {"cat": v_cat, "dog": v_dog}
+d["cat"]            # exact match -> exactly one value
+```
+
+Attention is a **soft** lookup. The query is compared with *every* key, each comparison gives a similarity score, and what you get back is a blend of *all* the values, weighted by those scores. Each token plays three roles:
+
+| Role | Name | Plain-language meaning |
+|---|---|---|
+| What I am looking for | **Query** (Q) | "Which other tokens are relevant to me?" |
+| What I advertise for matching | **Key** (K) | "This is what I look like to a query." |
+| What I hand over if chosen | **Value** (V) | "This is the content you get if you attend to me." |
+
+Why three separate roles instead of using the token vector directly? Because "what makes me a good match" and "what I contribute once matched" are different jobs, and the model is free to learn them separately. It also makes attention asymmetric: token A can attend strongly to token B without B attending to A.
+
+## The computation, with shapes
+
+Let a sequence have $n$ tokens, each represented by a $d$-dimensional vector. Stack them into a matrix $X \in \mathbb{R}^{n \times d}$ (one row per token). Attention uses three learned projection matrices to produce queries, keys and values:
+
+$$
+Q = X W^Q, \qquad K = X W^K, \qquad V = X W^V
+$$
+
+with $W^Q, W^K \in \mathbb{R}^{d \times d_k}$ and $W^V \in \mathbb{R}^{d \times d_v}$. Then:
+
+$$
+\text{Attention}(Q, K, V) \;=\; \text{softmax}\!\left(\frac{Q K^{\top}}{\sqrt{d_k}}\right) V
+$$
+
+| Symbol | Meaning | Shape |
+|---|---|---|
+| $n$ | number of tokens in the sequence | — |
+| $d$ | width of the token vectors (the "model dimension") | — |
+| $d_k$ | size of each query and key vector | — |
+| $d_v$ | size of each value vector | — |
+| $X$ | input, one row per token | $n \times d$ |
+| $W^Q, W^K, W^V$ | learned projection matrices | $d \times d_k$, $d \times d_k$, $d \times d_v$ |
+| $Q, K, V$ | queries, keys, values | $n \times d_k$, $n \times d_k$, $n \times d_v$ |
+| $S = QK^\top$ | raw scores; entry $(i,j)$ = how well query $i$ matches key $j$ | $n \times n$ |
+| $A$ | attention weights = row-wise softmax of $S/\sqrt{d_k}$ | $n \times n$ |
+| $O = AV$ | output, one new vector per token | $n \times d_v$ |
+
+The pipeline in four steps:
+
+```{mermaid}
+flowchart LR
+  X["<b>Input</b><br/>X (n×d)"] --> Q["<b>Queries</b><br/>Q = X·W_Q (n×d_k)"]
+  X --> K["<b>Keys</b><br/>K = X·W_K (n×d_k)"]
+  X --> V["<b>Values</b><br/>V = X·W_V (n×d_v)"]
+  Q --> S["<b>1. Scores</b><br/>S = Q·Kᵀ (n×n)"]
+  K --> S
+  S --> SC["<b>2. Scale</b><br/>S / √d_k"]
+  SC --> SM["<b>3. Softmax per row</b><br/>A (n×n), rows sum to 1"]
+  SM --> O["<b>4. Weighted sum</b><br/>O = A·V (n×d_v)"]
+  V --> O
+```
+
+1. **Scores.** $QK^\top$ takes the dot product of every query with every key. A large dot product means "these two vectors point in a similar direction", which is the model's notion of relevance.
+2. **Scale.** Divide by $\sqrt{d_k}$ (explained below).
+3. **Softmax, per row.** Turn each row of scores into positive weights that sum to 1. Row $i$ says how much token $i$ attends to each token.
+4. **Weighted sum.** Multiply by $V$: row $i$ of the output is the weighted average of all value vectors, using row $i$ of $A$ as the weights.
+
+## A worked example
+
+Three tokens, $d_k = d_v = 2$. Suppose the projections produced:
+
+$$
+Q = K = \begin{pmatrix} 1 & 0 \\ 0 & 1 \\ 1 & 1 \end{pmatrix}, \qquad
+V = \begin{pmatrix} 1 & 0 \\ 0 & 2 \\ 2 & 2 \end{pmatrix}
+$$
+
+**Scores** $S = QK^\top$ (entry $(i,j)$ = dot product of query $i$ with key $j$):
+
+$$
+S = \begin{pmatrix} 1 & 0 & 1 \\ 0 & 1 & 1 \\ 1 & 1 & 2 \end{pmatrix}
+$$
+
+**Scale** by $\sqrt{d_k} = \sqrt{2} \approx 1.414$, then **softmax each row**. For row 1: $\text{softmax}(0.71,\ 0,\ 0.71) = (0.40,\ 0.20,\ 0.40)$. Doing all rows (rounded to two decimals):
+
+$$
+A \approx \begin{pmatrix} 0.40 & 0.20 & 0.40 \\ 0.20 & 0.40 & 0.40 \\ 0.25 & 0.25 & 0.50 \end{pmatrix}
+$$
+
+**Weighted sum** $O = AV$. Row 1 is $0.40\,(1,0) + 0.20\,(0,2) + 0.40\,(2,2) = (1.2,\ 1.2)$. All rows:
+
+$$
+O \approx \begin{pmatrix} 1.20 & 1.20 \\ 1.00 & 1.60 \\ 1.26 & 1.50 \end{pmatrix}
+$$
+
+Things to notice:
+
+- Every row of $A$ sums to 1, so each output is a genuine weighted average of the value vectors.
+- Token 3 has the query $(1,1)$, which has a positive dot product with every key, and its largest weight (0.50) is on itself because its own key $(1,1)$ matches best.
+- The output has the same number of rows as the input ($n$): attention maps a sequence of $n$ vectors to a sequence of $n$ vectors.
+
+## Why divide by $\sqrt{d_k}$?
+
+The paper's explanation (Vaswani et al., 2017) is that for large $d_k$ the dot products grow large in magnitude, which pushes softmax into regions where its gradients are extremely small. The authors present this explicitly as a suspicion rather than a proven result, supported by the observation that, without scaling, dot-product attention did worse than additive attention at larger $d_k$ (Britz et al., 2017). Here is the reasoning behind it, in three steps.
+
+**Step 1: the size of a dot product grows with $d_k$.** Assume the components of a query $q$ and a key $k$ are independent random variables with mean 0 and variance 1. Then each product $q_i k_i$ has mean 0 and variance 1. The dot product $q \cdot k = \sum_{i=1}^{d_k} q_i k_i$ adds up $d_k$ independent terms, and variances of independent terms add:
+
+$$
+\text{Var}(q \cdot k) = d_k \quad\Longrightarrow\quad \text{standard deviation} = \sqrt{d_k}
+$$
+
+So with $d_k = 64$, typical scores are spread over a range of about $\pm 8$, not $\pm 1$. (This assumption is a clean idealization, roughly right for freshly initialized vectors; it is the argument's starting point, not a guarantee during training.)
+
+**Step 2: big scores make softmax nearly one-hot.** Softmax exponentiates its inputs, so a gap of 8 between two scores means a weight ratio of $e^8 \approx 3000$. One key grabs almost all the weight. We can check this numerically with random vectors:
+
+```python
+import numpy as np
+
+def softmax(z, axis=-1):
+    z = z - z.max(axis=axis, keepdims=True)
+    e = np.exp(z)
+    return e / e.sum(axis=axis, keepdims=True)
+
+rng = np.random.default_rng(0)
+d_k = 64
+
+# 1) variance of a dot product grows with d_k
+q = rng.standard_normal((100_000, d_k))
+k = rng.standard_normal((100_000, d_k))
+s = (q * k).sum(axis=1)
+print(s.var(), s.std(), (s / np.sqrt(d_k)).std())   # 64.0  8.0  1.0
+
+# 2) softmax saturation: 8 random keys per query
+q = rng.standard_normal((1000, d_k))
+K8 = rng.standard_normal((1000, 8, d_k))
+s = np.einsum("bd,bnd->bn", q, K8)
+print(softmax(s).max(axis=1).mean())                  # 0.88  (unscaled)
+print(softmax(s / np.sqrt(d_k)).max(axis=1).mean())   # 0.36  (scaled)
+
+# 3) size of the softmax derivatives, J_ij = p_i (delta_ij - p_j)
+def mean_abs_jacobian(p):
+    J = p[:, :, None] * np.eye(8) - p[:, :, None] * p[:, None, :]
+    return np.abs(J).mean()
+print(mean_abs_jacobian(softmax(s)))                  # ~0.005 (unscaled)
+print(mean_abs_jacobian(softmax(s / np.sqrt(d_k))))   # ~0.024 (scaled)
+```
+
+Without scaling, the largest of 8 weights is on average 0.88 (almost one-hot). With scaling it is 0.36, a much softer distribution.
+
+**Step 3: a near-one-hot softmax has almost no gradient.** For softmax outputs $p$, the derivative of output $p_i$ with respect to input $s_j$ is $p_i(\delta_{ij} - p_j)$, where $\delta_{ij}$ is 1 if $i = j$ and 0 otherwise. If $p$ is nearly one-hot, then for every $i$ either $p_i \approx 0$ or $1 - p_i \approx 0$, so these derivatives all shrink toward zero. Learning stalls for that attention row. In the same simulation, the average size of a derivative entry is roughly 0.005 without scaling versus 0.024 with it, about 4 to 5 times smaller.
+
+Dividing by $\sqrt{d_k}$ rescales the variance of the scores back to 1, whatever $d_k$ is. That is the whole trick.
+
+## Why attention instead of recurrence?
+
+The paper motivates self-attention with three desiderata: computation per layer, how much can run in parallel, and how short the path is between two distant positions (Vaswani et al., 2017). Their comparison (restated here), with $n$ = sequence length, $d$ = representation size, $k$ = convolution kernel size:
+
+| Layer type | Computation per layer | Sequential operations | Longest path between two positions |
+|---|---|---|---|
+| Self-attention | $O(n^2 \cdot d)$ | $O(1)$ | $O(1)$ |
+| Recurrent | $O(n \cdot d^2)$ | $O(n)$ | $O(n)$ |
+| Convolutional | $O(k \cdot n \cdot d^2)$ | $O(1)$ | $O(\log_k n)$ |
+
+In plain words:
+
+- **Sequential operations.** A recurrent layer must process position 1, then 2, then 3, and so on, so it cannot parallelize across the sequence. Attention computes all positions at once as matrix multiplications, which is what GPUs are good at.
+- **Path length.** In a recurrent network, a signal from token 1 must pass through $n-1$ steps to reach token $n$, and learning long-range dependencies is hard along such paths. In attention every pair of tokens is directly connected.
+- **Cost.** Attention is cheaper per layer than recurrence when $n < d$, which the paper notes is typical for sentence representations. When $n$ gets large the $n^2$ term hurts. That cost is the subject of [the fourth article](../attention-cost-kv-cache/index.qmd).
+
+## A minimal implementation
+
+```python
+import numpy as np
+
+def softmax(z, axis=-1):
+    z = z - z.max(axis=axis, keepdims=True)      # subtract the max for numerical stability
+    e = np.exp(z)
+    return e / e.sum(axis=axis, keepdims=True)
+
+def attention(Q, K, V):
+    d_k = Q.shape[-1]
+    scores = Q @ K.T / np.sqrt(d_k)              # (n, n)
+    weights = softmax(scores, axis=-1)           # each row sums to 1
+    return weights @ V, weights                  # (n, d_v), (n, n)
+
+Q = K = np.array([[1., 0.], [0., 1.], [1., 1.]])
+V = np.array([[1., 0.], [0., 2.], [2., 2.]])
+out, w = attention(Q, K, V)
+print(np.round(w, 2))     # [[0.4  0.2  0.4 ] [0.2  0.4  0.4 ] [0.25 0.25 0.5 ]]
+print(np.round(out, 2))   # [[1.2  1.2 ] [1.   1.6 ] [1.26 1.5 ]]
+```
+
+This reproduces the worked example. In a real model $Q$, $K$ and $V$ come from $XW^Q$, $XW^K$, $XW^V$ with learned weights, and many such operations run in parallel (next articles).
+
+## What this operation does *not* do yet
+
+- **It has no sense of order.** If you shuffle the rows of $X$, the rows of the output are shuffled in exactly the same way. Attention alone cannot tell "dog bites man" from "man bites dog", so Transformers add *positional information* to the embeddings. That is the topic of a later article in this series.
+- **It looks at every token, including the future.** For text generation, a token must not see the tokens that come after it. That needs a *mask*, covered in the [next article](../attention-masks-encoder-decoder/index.qmd).
+- **It produces one weighted average per token.** *Multi-head attention* runs several of these in parallel, each with its own projections. See [the third article](../multi-head-attention/index.qmd).
+
+## Common pitfalls
+
+- **Softmax over the wrong axis.** Softmax is applied along each *row* of $S$ (over the keys), so every query's weights sum to 1. The columns do not sum to 1.
+- **Dividing by $d_k$ instead of $\sqrt{d_k}$**, or forgetting the scaling altogether. The model may still train, but the saturation problem above gets worse as $d_k$ grows.
+- **Skipping numerical stabilization.** Exponentiating large scores overflows, especially in 16-bit floats. Subtracting the row maximum before `exp` does not change the result and prevents it.
+- **Mismatched dimensions.** Queries and keys must have the same size $d_k$ (they are dotted together). Values can have a different size $d_v$; the output has $d_v$ columns.
+- **Reading attention maps as explanations.** It is tempting to say "the model predicted this because it attended to that word". Studies of attention in NLP models found that attention weights often do not correlate with other measures of feature importance, and that very different attention patterns can give the same prediction (Jain & Wallace, 2019). The original paper's own attention visualizations are presented in hedged terms: some heads *apparently* track sentence structure (Vaswani et al., 2017). Treat attention maps as a window onto the computation, not as a proof of reasoning.
+- **Confusing the cost of the matrix with the cost of the layer.** $S$ and $A$ are $n \times n$ per head per layer. For short inputs this is nothing; for long contexts it dominates.
+
+## Summary
+
+- Attention gives every token a new vector: a weighted average of all tokens' **values**, with weights from how well its **query** matches their **keys**.
+- Shapes: $Q, K \in \mathbb{R}^{n \times d_k}$, $V \in \mathbb{R}^{n \times d_v}$, scores and weights are $n \times n$, output is $n \times d_v$.
+- Dividing by $\sqrt{d_k}$ keeps the score variance at 1, which keeps softmax away from saturation where gradients vanish.
+- Compared with recurrence, attention parallelizes across positions and connects any two tokens in one step, at an $O(n^2 \cdot d)$ cost per layer.
+
+## References
+
+- Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, Ł., Polosukhin, I. (2017). *Attention Is All You Need.* NeurIPS 2017. [arXiv:1706.03762](https://arxiv.org/abs/1706.03762).
+- Britz, D., Goldie, A., Luong, M.-T., Le, Q. V. (2017). *Massive Exploration of Neural Machine Translation Architectures.* [arXiv:1703.03906](https://arxiv.org/abs/1703.03906).
+- Jain, S., Wallace, B. C. (2019). *Attention is not Explanation.* NAACL 2019. [arXiv:1902.10186](https://arxiv.org/abs/1902.10186).
+- Roitman, H. *The Hitchhiker's Guide to Agentic AI: From Foundations to Systems.* [arXiv:2606.24937](https://arxiv.org/abs/2606.24937).
+
+---
+
+This work adapts material from "The Hitchhiker's Guide to Agentic AI" by Haggai Roitman (arXiv:2606.24937v3, book version 1.4), licensed under CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/). Changes: adapted into standalone articles, with added explanations, diagrams and examples. This work is licensed under CC BY-SA 4.0.

@@ -1,0 +1,17 @@
+---
+title: "Foundations of LLMs"
+description: ""
+listing:
+  contents: "*/index.qmd"
+  sort: "part asc"
+  type: table
+  fields: [part, title, description]
+  field-display-names:
+    part: "Part"
+  sort-ui: false
+  filter-ui: false
+---
+
+The first series on this site. It starts where every language model starts: raw text. It follows that text as it is split into tokens, turned into vectors, measured by similarity, etc.
+
+**Prerequisites:** some Python, and basic linear algebra (vectors, matrix products, eigenvalues). The companion pages linked from each article go deeper into the math and can be skipped on a first read.

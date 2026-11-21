@@ -3,7 +3,11 @@ title: "Companion: Principal Components, SVD, and Maximum Explainable Variance"
 description: "Step-by-step derivation connecting sample covariance, variance maximization, Singular Value Decomposition (SVD), and the MEV ratio."
 date: "2026-11-01"
 draft: false
-categories: [llm, embeddings, math]
+series: "Foundations of LLMs"
+companion: true
+categories: [embeddings, linear-algebra, math]
+aliases:
+  - /posts/anisotropy-whitening/mev-derivation.html
 ---
 
 This page is a companion to [Anisotropy and Whitening](index.qmd). It derives from scratch why the **maximum explainable variance (MEV)** along a single axis equals the ratio of squared singular values $\sigma_1^2 / \sum_i \sigma_i^2$, and shows how singular values connect to the eigenvalues of $\mathbf{X}^\top \mathbf{X}$.
