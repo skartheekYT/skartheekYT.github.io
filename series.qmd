@@ -1,6 +1,6 @@
 ---
 title: "Series"
-description: "Sequences of articles meant to be read in order."
+description: ""
 listing:
   contents: "series/*/index.qmd"
   type: grid
