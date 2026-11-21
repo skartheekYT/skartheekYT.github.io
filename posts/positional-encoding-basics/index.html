@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.20">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="dcterms.date" content="2026-11-12">
+<meta name="description" content="Attention has no sense of order. Sinusoidal, learned, relative-bias and ALiBi encodings are four ways to add it.">
+
+<title>Positional Encoding, Part 1: Why Transformers Need Positions – Agentic AI Notes</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+</style>
+
+
+<script src="../../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../../">
+<script src="../../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../../site_libs/quarto-html/popper.min.js"></script>
+<script src="../../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../../site_libs/quarto-html/quarto-syntax-highlighting-17888a1159294d3eb470f19f6f52f5a5.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../../site_libs/bootstrap/bootstrap-17e92714493fce31463ccfbbc8488715.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+<script src="../../site_libs/quarto-diagram/mermaid.min.js"></script>
+<script src="../../site_libs/quarto-diagram/mermaid-init.js"></script>
+<link href="../../site_libs/quarto-diagram/mermaid.css" rel="stylesheet">
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../../styles.css">
+</head>
+
+<body class="nav-fixed quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a class="navbar-brand" href="../../index.html">
+    <span class="navbar-title">Agentic AI Notes</span>
+    </a>
+  </div>
+            <div id="quarto-search" class="" title="Search"></div>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+  <span class="navbar-toggler-icon"></span>
+</button>
+          <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav navbar-nav-scroll me-auto">
+  <li class="nav-item">
+    <a class="nav-link" href="../../index.html"> 
+<span class="menu-text">Home</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../blog.html"> 
+<span class="menu-text">Articles</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../about.html"> 
+<span class="menu-text">About</span></a>
+  </li>  
+</ul>
+          </div> <!-- /navcollapse -->
+            <div class="quarto-navbar-tools">
+</div>
+      </div> <!-- /container-fluid -->
+    </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">On this page</h2>
+   
+  <ul>
+  <li><a href="#the-problem-attention-is-a-set-operation" id="toc-the-problem-attention-is-a-set-operation" class="nav-link active" data-scroll-target="#the-problem-attention-is-a-set-operation">1. The problem: attention is a set operation</a>
+  <ul class="collapse">
+  <li><a href="#a-subtlety-causal-masks-leak-a-little-position" id="toc-a-subtlety-causal-masks-leak-a-little-position" class="nav-link" data-scroll-target="#a-subtlety-causal-masks-leak-a-little-position">A subtlety: causal masks leak a little position</a></li>
+  </ul></li>
+  <li><a href="#where-can-position-enter" id="toc-where-can-position-enter" class="nav-link" data-scroll-target="#where-can-position-enter">2. Where can position enter?</a></li>
+  <li><a href="#sinusoidal-encoding-original-transformer" id="toc-sinusoidal-encoding-original-transformer" class="nav-link" data-scroll-target="#sinusoidal-encoding-original-transformer">3. Sinusoidal encoding (original Transformer)</a>
+  <ul class="collapse">
+  <li><a href="#start-with-a-binary-counter" id="toc-start-with-a-binary-counter" class="nav-link" data-scroll-target="#start-with-a-binary-counter">3.1 Start with a binary counter</a></li>
+  <li><a href="#from-bits-to-sinusoids" id="toc-from-bits-to-sinusoids" class="nav-link" data-scroll-target="#from-bits-to-sinusoids">3.2 From bits to sinusoids</a></li>
+  <li><a href="#what-the-encoding-looks-like" id="toc-what-the-encoding-looks-like" class="nav-link" data-scroll-target="#what-the-encoding-looks-like">3.3 What the encoding looks like</a></li>
+  <li><a href="#why-sine-and-cosine" id="toc-why-sine-and-cosine" class="nav-link" data-scroll-target="#why-sine-and-cosine">3.4 Why sine and cosine?</a></li>
+  <li><a href="#trade-offs" id="toc-trade-offs" class="nav-link" data-scroll-target="#trade-offs">3.5 Trade-offs</a></li>
+  </ul></li>
+  <li><a href="#learned-absolute-embeddings" id="toc-learned-absolute-embeddings" class="nav-link" data-scroll-target="#learned-absolute-embeddings">4. Learned absolute embeddings</a></li>
+  <li><a href="#relative-position-biases" id="toc-relative-position-biases" class="nav-link" data-scroll-target="#relative-position-biases">5. Relative position biases</a></li>
+  <li><a href="#alibi-a-fixed-linear-penalty-on-distance" id="toc-alibi-a-fixed-linear-penalty-on-distance" class="nav-link" data-scroll-target="#alibi-a-fixed-linear-penalty-on-distance">6. ALiBi: a fixed linear penalty on distance</a></li>
+  <li><a href="#side-by-side" id="toc-side-by-side" class="nav-link" data-scroll-target="#side-by-side">7. Side by side</a></li>
+  <li><a href="#common-pitfalls" id="toc-common-pitfalls" class="nav-link" data-scroll-target="#common-pitfalls">Common pitfalls</a></li>
+  <li><a href="#references" id="toc-references" class="nav-link" data-scroll-target="#references">References</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Positional Encoding, Part 1: Why Transformers Need Positions</h1>
+  <div class="quarto-categories">
+    <div class="quarto-category">LLMs</div>
+    <div class="quarto-category">transformers</div>
+    <div class="quarto-category">positional-encoding</div>
+  </div>
+  </div>
+
+<div>
+  <div class="description">
+    Attention has no sense of order. Sinusoidal, learned, relative-bias and ALiBi encodings are four ways to add it.
+  </div>
+</div>
+
+
+<div class="quarto-title-meta">
+
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">November 12, 2026</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>Take the sentence “the cat sat on the mat” and shuffle it into “mat the on sat cat the”. A transformer layer (without a causal mask), as originally defined, produces the <em>same</em> vector for the token “sat” in both cases. Self-attention has no built-in notion of order. This article covers why, what we do about it, and four classic answers: sinusoidal, learned absolute, relative biases, and ALiBi. <a href="../../posts/rope-rotary-position-embedding/index.html">Part 2</a> covers rotary embeddings (RoPE), and <a href="../../posts/rope-context-extension/index.html">Part 3</a> covers stretching a model to longer contexts.</p>
+<section id="the-problem-attention-is-a-set-operation" class="level2">
+<h2 class="anchored" data-anchor-id="the-problem-attention-is-a-set-operation">1. The problem: attention is a set operation</h2>
+<p>For a sequence of token vectors <span class="math inline">\(x_1,\dots,x_N \in \mathbb{R}^d\)</span> (rows of a matrix <span class="math inline">\(X\)</span>), one attention head computes</p>
+<p><span class="math display">\[
+\text{Attn}(X) = \text{softmax}\!\left(\frac{(XW_q)(XW_k)^\top}{\sqrt{d_k}}\right) XW_v
+\]</span></p>
+<p>Symbols:</p>
+<ul>
+<li><span class="math inline">\(W_q, W_k, W_v\)</span> are learned projection matrices; <span class="math inline">\(q_i = W_q^\top x_i\)</span>, <span class="math inline">\(k_j = W_k^\top x_j\)</span>, <span class="math inline">\(v_j = W_v^\top x_j\)</span> are the query, key and value of token <span class="math inline">\(i\)</span> or <span class="math inline">\(j\)</span>.</li>
+<li><span class="math inline">\(d_k\)</span> is the key dimension; dividing by <span class="math inline">\(\sqrt{d_k}\)</span> keeps the scores at a stable scale.</li>
+<li>The score between tokens <span class="math inline">\(i\)</span> and <span class="math inline">\(j\)</span> is <span class="math inline">\(q_i^\top k_j / \sqrt{d_k}\)</span>. It depends only on the contents of <span class="math inline">\(x_i\)</span> and <span class="math inline">\(x_j\)</span>.</li>
+</ul>
+<p>Now permute the rows of <span class="math inline">\(X\)</span> with a permutation matrix <span class="math inline">\(P\)</span>. Every score is the same pair of contents, just moved to a new row and column, so the output is permuted the same way: <span class="math inline">\(\text{Attn}(PX) = P\,\text{Attn}(X)\)</span>. This property is called <strong>permutation equivariance</strong>. Each token’s output vector is identical whatever order the other tokens arrive in. The feed-forward layers act on each token separately, so they don’t add order information either.</p>
+<p>To a pure attention stack, a sentence is a bag of tokens. Word order obviously matters (“dog bites man” is not “man bites dog”), so we have to inject it.</p>
+<section id="a-subtlety-causal-masks-leak-a-little-position" class="level3">
+<h3 class="anchored" data-anchor-id="a-subtlety-causal-masks-leak-a-little-position">A subtlety: causal masks leak a little position</h3>
+<p>Decoder-only language models use a <em>causal mask</em>: token <span class="math inline">\(i\)</span> may only attend to tokens <span class="math inline">\(j \le i\)</span>. This breaks the symmetry slightly. Token <span class="math inline">\(i\)</span> averages over exactly <span class="math inline">\(i\)</span> tokens, so in principle a model can infer “how many tokens came before me” and so approximate its absolute position. Haviv et al.&nbsp;(2022) trained causal language models with no positional encoding at all and found they stay competitive, and probing showed they learn an implicit notion of absolute position. The same trick does not work for bidirectional (masked) language models, which failed to converge without position information.</p>
+<p>So the causal mask provides a weak, absolute, implicit signal. Explicit positional encodings give a stronger and cleaner one, and they are what the rest of this series is about.</p>
+</section>
+</section>
+<section id="where-can-position-enter" class="level2">
+<h2 class="anchored" data-anchor-id="where-can-position-enter">2. Where can position enter?</h2>
+<p>There are three natural places, and each classic method picks one.</p>
+<div class="cell" data-layout-align="default">
+<div class="cell-output-display">
+<div>
+<p></p><figure class="figure"><p></p>
+<div>
+<pre class="mermaid mermaid-js">flowchart LR
+  A["&lt;b&gt;Token embedding&lt;/b&gt;&lt;br/&gt;xᵢ ∈ ℝᵈ"] --&gt;|"① add position&lt;br/&gt;xᵢ + pᵢ"| B["&lt;b&gt;Projections&lt;/b&gt;&lt;br/&gt;qᵢ = W_q xᵢ, kⱼ = W_k xⱼ"]
+  B --&gt;|"③ rotate q, k&lt;br/&gt;(RoPE, Part 2)"| C["&lt;b&gt;Scores&lt;/b&gt;&lt;br/&gt;sᵢⱼ = qᵢᵀ kⱼ / √d_k"]
+  C --&gt;|"② subtract distance penalty&lt;br/&gt;sᵢⱼ − m·(i−j)"| D["&lt;b&gt;Softmax and weighted sum&lt;/b&gt;&lt;br/&gt;Σⱼ aᵢⱼ vⱼ"]
+</pre>
+</div>
+<p></p></figure><p></p>
+</div>
+</div>
+</div>
+<ol type="1">
+<li><strong>Add to the input</strong> (sinusoidal, learned absolute): the position vector <span class="math inline">\(p_i\)</span> is added directly to the token embedding before the first layer.</li>
+<li><strong>Bias the scores</strong> (relative-position biases, ALiBi): leave the vectors alone and add a distance-dependent number to each attention score.</li>
+<li><strong>Rotate queries and keys</strong> (RoPE): transform <span class="math inline">\(q\)</span> and <span class="math inline">\(k\)</span> by a position-dependent rotation. This is Part 2.</li>
+</ol>
+<p>Good positional information should do four things:</p>
+<ul>
+<li>distinguish different orders;</li>
+<li>make relative distance easy to use (a phrase means the same thing at position 5 or position 5000);</li>
+<li>keep working on sequences longer than anything seen in training;</li>
+<li>cost little compute and few parameters.</li>
+</ul>
+<p>The methods below trade these off differently.</p>
+</section>
+<section id="sinusoidal-encoding-original-transformer" class="level2">
+<h2 class="anchored" data-anchor-id="sinusoidal-encoding-original-transformer">3. Sinusoidal encoding (original Transformer)</h2>
+<section id="start-with-a-binary-counter" class="level3">
+<h3 class="anchored" data-anchor-id="start-with-a-binary-counter">3.1 Start with a binary counter</h3>
+<p>How would you tag positions <span class="math inline">\(0,1,2,\dots\)</span> with numbers a network can use? The raw integer <span class="math inline">\(pos\)</span> is a poor choice: it is unbounded, and large values would swamp the token embedding. Binary counting suggests something better. Here are the first eight positions written with three bits:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th style="text-align: center;">Position</th>
+<th style="text-align: center;">Bit 2</th>
+<th style="text-align: center;">Bit 1</th>
+<th style="text-align: center;">Bit 0</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: center;">0</td>
+<td style="text-align: center;">0</td>
+<td style="text-align: center;">0</td>
+<td style="text-align: center;">0</td>
+</tr>
+<tr class="even">
+<td style="text-align: center;">1</td>
+<td style="text-align: center;">0</td>
+<td style="text-align: center;">0</td>
+<td style="text-align: center;">1</td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;">2</td>
+<td style="text-align: center;">0</td>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;">0</td>
+</tr>
+<tr class="even">
+<td style="text-align: center;">3</td>
+<td style="text-align: center;">0</td>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;">1</td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;">4</td>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;">0</td>
+<td style="text-align: center;">0</td>
+</tr>
+<tr class="even">
+<td style="text-align: center;">5</td>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;">0</td>
+<td style="text-align: center;">1</td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;">6</td>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;">0</td>
+</tr>
+<tr class="even">
+<td style="text-align: center;">7</td>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;">1</td>
+</tr>
+</tbody>
+</table>
+<br>
+<p style="margin-bottom: 0;">
+Read down each column:
+</p>
+<ul>
+<li>the <strong>rightmost bit</strong> (bit 0, the least significant) flips at every step;</li>
+<li>the <strong>middle bit</strong> flips every 2 steps;</li>
+<li>the <strong>leftmost bit</strong> flips every 4 steps.</li>
+</ul>
+<p>Each bit flips at half the rate of the bit to its right. Together the bits give every position a unique code, and <span class="math inline">\(n\)</span> bits are enough for <span class="math inline">\(2^n\)</span> positions. Notice the division of labour: the fast bits tell neighbours apart (position 6 versus 7), while the slow bits say roughly where you are (first half versus second half). A cascade of frequencies gives both fine and coarse position information from a handful of numbers.</p>
+<p>Bits are a poor fit for a neural network, though. Each bit is a square wave that jumps between exactly 0 and 1. That is discrete and not differentiable.</p>
+</section>
+<section id="from-bits-to-sinusoids" class="level3">
+<h3 class="anchored" data-anchor-id="from-bits-to-sinusoids">3.2 From bits to sinusoids</h3>
+<p>Vaswani et al.&nbsp;(2017) kept the idea of cascading frequencies, not the square wave. They did not use sinusoids as a smooth squiggle that approximates the exact 0s and 1s of a bit. They wanted a <strong>continuous</strong> version of the counter, where each embedding dimension plays the role of one bit:</p>
+<ul>
+<li>the lowest dimensions act like the rightmost bits and oscillate rapidly;</li>
+<li>the highest dimensions act like the leftmost bits and turn incredibly slowly;</li>
+<li>instead of flipping between 0 and 1, each dimension moves smoothly in <span class="math inline">\([-1, 1]\)</span>, so it is bounded and differentiable, and nearby positions get nearby vectors.</li>
+</ul>
+<p>Reading the values of all the waves at once gives a fingerprint of the position.</p>
+<p>Concretely, the encoding adds a fixed vector <span class="math inline">\(PE(pos) \in \mathbb{R}^d\)</span> to the embedding of the token at position <span class="math inline">\(pos\)</span>:</p>
+<p><span class="math display">\[
+PE(pos, 2i) = \sin\!\left(\frac{pos}{10000^{2i/d}}\right), \qquad
+PE(pos, 2i+1) = \cos\!\left(\frac{pos}{10000^{2i/d}}\right)
+\]</span></p>
+<p>Symbols: <span class="math inline">\(pos = 0,1,2,\dots\)</span> is the token position; <span class="math inline">\(d\)</span> is the model dimension; <span class="math inline">\(i = 0,\dots,d/2-1\)</span> indexes a pair of dimensions (a sine and a cosine of the same frequency), so dimension <span class="math inline">\(2i\)</span> is a sine and <span class="math inline">\(2i+1\)</span> a cosine.</p>
+<p><strong>Intuition.</strong> Think of a clock with many hands. Pair <span class="math inline">\(i\)</span> is one hand that completes a full turn every <span class="math inline">\(\lambda_i = 2\pi \cdot 10000^{2i/d}\)</span> positions. The first pair turns every <span class="math inline">\(2\pi \approx 6\)</span> tokens. The slowest turns roughly every <span class="math inline">\(2\pi \cdot 10000 \approx 63{,}000\)</span> tokens. Together the hands give each position a unique fingerprint, like the digits of a counter where low digits flip fast and high digits flip slowly. The geometric spacing of wavelengths covers many scales with few dimensions.</p>
+<p>The binary analogy has limits: bit periods double each time (2, 4, 8, …), while here the wavelengths grow by the constant factor <span class="math inline">\(10000^{2/d}\)</span> from one pair to the next, so they span a much wider range with the same number of dimensions.</p>
+</section>
+<section id="what-the-encoding-looks-like" class="level3">
+<h3 class="anchored" data-anchor-id="what-the-encoding-looks-like">3.3 What the encoding looks like</h3>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="sinusoidal-heatmap.svg" class="img-fluid figure-img"></p>
+<figcaption>The sinusoidal encoding for <span class="math inline">\(d=128\)</span> and positions 0 to 49. Each row is the positional vector of one position; each column is one embedding dimension. Colour is the value in <span class="math inline">\([-1, 1]\)</span>.</figcaption>
+</figure>
+</div>
+<p>Read the picture as a stack of position vectors: row <span class="math inline">\(pos\)</span> is <span class="math inline">\(PE(pos)\)</span>, and the columns are the dimensions <span class="math inline">\(0,\dots,127\)</span>.</p>
+<ul>
+<li><strong>Left side (low dimensions, like the rightmost bits):</strong> the colours change quickly as you move down through the positions. These are the fast waves, and they separate neighbouring positions.</li>
+<li><strong>Right side (high dimensions, like the leftmost bits):</strong> the colour barely changes down the column. These are the slow waves; over these 50 positions they are almost constant. The thin vertical stripes there come from the even and odd dimensions alternating between a sine (close to 0) and a cosine (close to 1) of the same slow frequency.</li>
+<li>The curved bands are explained below.</li>
+</ul>
+<p><strong>How to read it.</strong> Draw a horizontal line at any position <span class="math inline">\(pos\)</span>. The sequence of colours (values) along that line, across all the different frequencies, is the positional vector for a token at position <span class="math inline">\(pos\)</span>. Move one row down and the left part changes a lot while the right part hardly moves. Two different positions would have to agree on every column at once to get the same vector, and with wavelengths that don’t line up with each other that does not happen in practice within the range of lengths we use.</p>
+<section id="why-the-bands-curve" class="level4">
+<h4 class="anchored" data-anchor-id="why-the-bands-curve"><strong>Why the bands curve</strong></h4>
+<p>The curved bands are contours of constant phase. For an even (sine) column <span class="math inline">\(x\)</span>, the value at row <span class="math inline">\(pos\)</span> is <span class="math inline">\(\sin\theta\)</span>, where the phase is</p>
+<p><span class="math display">\[
+\theta(pos, x) = \frac{pos}{10000^{x/d}}, \qquad d = 128
+\]</span></p>
+<p>A band of one colour follows the cells where <span class="math inline">\(\theta\)</span> equals a fixed value <span class="math inline">\(C\)</span>: for example <span class="math inline">\(C=\pi/2\)</span> for the first dark-blue peak, <span class="math inline">\(C=\pi\)</span> for the first zero crossing, and <span class="math inline">\(C=3\pi/2\)</span> for the first dark-red trough. Solving <span class="math inline">\(\theta = C\)</span> for the row gives the shape of the band:</p>
+<p><span class="math display">\[
+pos(x) = C \cdot 10000^{x/d}
+\]</span></p>
+<p>Because <span class="math inline">\(x\)</span> sits in the exponent, every band is an exponential curve. The intuition: moving right, the frequency drops exponentially, so you must go further down the sequence (larger <span class="math inline">\(pos\)</span>) before the wave reaches the same phase. Tracing the “first peak” across slower and slower columns draws a curve that dives from the top left towards the bottom right (position 0 is at the top of the plot).</p>
+<p>Where does each band meet the bottom edge, the last row <span class="math inline">\(pos=49\)</span>?</p>
+<p><span class="math display">\[
+pos(x) = C \cdot 10000^{x/d} \implies x = \frac{d}{4}\,\log_{10}\!\left(\frac{pos}{C}\right) = 32\,\log_{10}\!\left(\frac{49}{C}\right)
+\]</span></p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Landmark of the first sine cycle</th>
+<th>Phase <span class="math inline">\(C\)</span></th>
+<th>Column at the bottom row</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>first peak (quarter cycle)</td>
+<td><span class="math inline">\(\pi/2\)</span></td>
+<td><span class="math inline">\(\approx 48\)</span></td>
+</tr>
+<tr class="even">
+<td>first zero crossing (half cycle)</td>
+<td><span class="math inline">\(\pi\)</span></td>
+<td><span class="math inline">\(\approx 38\)</span></td>
+</tr>
+<tr class="odd">
+<td>first trough (three-quarter cycle)</td>
+<td><span class="math inline">\(3\pi/2\)</span></td>
+<td><span class="math inline">\(\approx 33\)</span></td>
+</tr>
+<tr class="even">
+<td>full cycle</td>
+<td><span class="math inline">\(2\pi\)</span></td>
+<td><span class="math inline">\(\approx 29\)</span></td>
+</tr>
+</tbody>
+</table>
+<p>The table represents the life of a single sine wave stretched across the columns. Around column 48 the wave is so slow that in 49 positions it has only climbed to its first peak. Around column 38 it has gone up and come back to zero. Around column 33 it has reached the bottom of its first trough. To the left of that, more cycles stack up, tighter and steeper, until they look like noise.</p>
+<p>One more detail: each cosine column (odd <span class="math inline">\(x\)</span>) has the same frequency as the sine column to its left but is shifted by a quarter wavelength, so the plot is two interleaved patterns. For example, to the right of column ≈ 48 both sine and cosine values are positive at the bottom row, which gives the broad blue region there.</p>
+</section>
+</section>
+<section id="why-sine-and-cosine" class="level3">
+<h3 class="anchored" data-anchor-id="why-sine-and-cosine">3.4 Why sine and cosine?</h3>
+<p>The authors chose this specific mathematical pairing to satisfy a hypothesis: the model could learn to attend by relative position if any positional shift <span class="math inline">\(PE(pos+k)\)</span> could be represented as a simple linear function of <span class="math inline">\(PE(pos)\)</span>. The sine and cosine pair achieves exactly this. For one pair with angular frequency <span class="math inline">\(\omega_i = 10000^{-2i/d}\)</span>:</p>
+<p><span class="math display">\[
+\begin{pmatrix}\sin\omega_i(pos+k)\\ \cos\omega_i(pos+k)\end{pmatrix}
+=
+\underbrace{\begin{pmatrix}\cos\omega_i k &amp; \sin\omega_i k\\ -\sin\omega_i k &amp; \cos\omega_i k\end{pmatrix}}_{\text{rotation by } \omega_i k,\ \text{depends only on } k}
+\begin{pmatrix}\sin\omega_i pos\\ \cos\omega_i pos\end{pmatrix}
+\]</span></p>
+<p>Shifting a position by <span class="math inline">\(k\)</span> rotates each pair by an angle that depends only on <span class="math inline">\(k\)</span>. Keep this “shift = rotation” picture in mind: RoPE in Part 2 is built on exactly this idea, applied in a different place.</p>
+</section>
+<section id="trade-offs" class="level3">
+<h3 class="anchored" data-anchor-id="trade-offs">3.5 Trade-offs</h3>
+<p>No parameters, deterministic, and defined for any position. But it is added once at the input, so position has to survive through all layers, and the model must learn to decode relative offsets from absolute fingerprints. In practice the extrapolation is poor: Press et al.&nbsp;(2022) showed that a sinusoidal model, although it technically can be evaluated at longer lengths, extrapolates very little beyond its training length. Because the network has never encountered those higher positions during training, it simply hasn’t learned how to interpret their novel positional signals. The original paper also tried learned position embeddings and found nearly identical results.</p>
+</section>
+</section>
+<section id="learned-absolute-embeddings" class="level2">
+<h2 class="anchored" data-anchor-id="learned-absolute-embeddings">4. Learned absolute embeddings</h2>
+<p>GPT-2 and BERT instead keep a trainable table <span class="math inline">\(E_{pos} \in \mathbb{R}^{L_{max}\times d}\)</span> and compute the input as</p>
+<p><span class="math display">\[
+h_0^{(pos)} = \text{TokenEmbed}(x_{pos}) + E_{pos}[pos]
+\]</span></p>
+<p>Symbols: <span class="math inline">\(L_{max}\)</span> is the maximum supported length (for example 512 for BERT, 1024 for GPT-2); row <span class="math inline">\(pos\)</span> of the table is the learned vector for that position.</p>
+<ul>
+<li><strong>Pros:</strong> maximum flexibility, simple to implement, works well within the training length.</li>
+<li><strong>Cons:</strong> it adds <span class="math inline">\(L_{max}\times d\)</span> parameters (for example <span class="math inline">\(2048 \times 768 \approx 1.6\)</span>M). There is no row at all for positions beyond <span class="math inline">\(L_{max}\)</span>, so the model cannot be used past it without new training. Rows for rarely used late positions also see little training signal and stay under-trained.</li>
+</ul>
+</section>
+<section id="relative-position-biases" class="level2">
+<h2 class="anchored" data-anchor-id="relative-position-biases">5. Relative position biases</h2>
+<p>Language mostly cares about <em>how far apart</em> tokens are, not their absolute index. Several methods make that explicit by feeding the relative distance <span class="math inline">\(i - j\)</span> into attention:</p>
+<ul>
+<li><strong>Shaw et al.&nbsp;(2018)</strong> add learned relative-position embeddings (indexed by the distance, <em>clipped</em> to a maximum) to the keys and values. The clipping encodes the hypothesis that precise distance stops mattering beyond some range.</li>
+<li><strong>T5 (Raffel et al., 2020)</strong> adds a learned scalar bias <span class="math inline">\(b_{i,j}\)</span> to each attention score, shared among bucketed distances.</li>
+</ul>
+<p>Written as the attention score <span class="math inline">\(s_{ij}\)</span> between a query at position <span class="math inline">\(i\)</span> and a key at position <span class="math inline">\(j\)</span> (with <span class="math inline">\(r = i-j\)</span> the relative distance), the two ideas are:</p>
+<p><span class="math display">\[
+\underbrace{s_{ij} = \frac{q_i^\top\big(k_j + a_{\mathrm{clip}(r,\,-c,\,c)}\big)}{\sqrt{d_k}}}_{\text{Shaw et al.}}
+\qquad\qquad
+\underbrace{s_{ij} = q_i^\top k_j + b_{\mathrm{bucket}(r)}}_{\text{T5}}
+\]</span></p>
+<p>Symbols: <span class="math inline">\(a_{\rho}\in\mathbb{R}^{d_k}\)</span> is a learned vector for each clipped distance <span class="math inline">\(\rho\in\{-c,\dots,c\}\)</span> (so distances beyond <span class="math inline">\(c\)</span> share one vector), and <span class="math inline">\(\mathrm{clip}(r,-c,c)=\max(-c,\min(c,r))\)</span>. <span class="math inline">\(b_{\cdot}\in\mathbb{R}\)</span> is a learned <em>scalar</em> for each distance bucket (separate for each head, with buckets that grow wider with distance), and <span class="math inline">\(\mathrm{bucket}(r)\)</span> maps a distance to its bucket. Shaw et al.&nbsp;also add a second learned vector to the values, <span class="math inline">\(v_j + a'_{\mathrm{clip}(r,-c,c)}\)</span>, which is omitted above. In both cases the usual softmax over <span class="math inline">\(j\)</span> follows.</p>
+<p>Both work <em>inside attention</em> rather than on the input embeddings, so the token vectors stay free of position. T5’s bias touches only the scores; ALiBi pushes that idea to the extreme.</p>
+</section>
+<section id="alibi-a-fixed-linear-penalty-on-distance" class="level2">
+<h2 class="anchored" data-anchor-id="alibi-a-fixed-linear-penalty-on-distance">6. ALiBi: a fixed linear penalty on distance</h2>
+<p>Press et al.&nbsp;(2022) drop positional embeddings altogether. For a query at position <span class="math inline">\(i\)</span> and a key at position <span class="math inline">\(j\)</span>, they subtract a penalty proportional to their absolute distance from the attention score:</p>
+<p><span class="math display">\[
+\text{score}_{ij}^{(h)} = \frac{q_i^\top k_j}{\sqrt{d_k}} - m_h\vert{}i-j\vert{}
+\]</span></p>
+<p>When applied to the entire sequence at once, this is equivalent to subtracting a fixed distance matrix (scaled by <span class="math inline">\(m_h\)</span>) inside the softmax:</p>
+<p><span class="math display">\[
+\text{Attention}(Q, K, V) = \text{softmax}\!\left(\frac{QK^T}{\sqrt{d_k}} - m \cdot [|i - j|]_{i,j}\right) V
+\]</span></p>
+<p>(Note: ALiBi was originally designed for causal language models, where a mask naturally prevents <span class="math inline">\(j &gt; i\)</span>. But using the absolute distance <span class="math inline">\(\vert{}i-j\vert{}\)</span> makes the penalty mechanism clear for any architecture).</p>
+<p>Symbols: <span class="math inline">\(h\)</span> is the attention head; <span class="math inline">\(m_h &gt; 0\)</span> is that head’s fixed slope. For <span class="math inline">\(H\)</span> heads the slopes form a geometric sequence <span class="math inline">\(m_h = 2^{-8h/H}\)</span> for <span class="math inline">\(h = 1,\dots,H\)</span>; with 8 heads this is <span class="math inline">\(\tfrac12, \tfrac14, \dots, \tfrac1{256}\)</span>. Nothing is learned and nothing is added to the embeddings.</p>
+<p><strong>Intuition.</strong> The penalty is a built-in <em>recency prior</em>: nearby tokens get a head start, and the farther away a token is, the lower its score. Steep heads (large <span class="math inline">\(m_h\)</span>) look almost only at the last few tokens. Shallow heads (small <span class="math inline">\(m_h\)</span>) can still reach far back. So the heads together give multi-scale locality.</p>
+<p><strong>Headline result.</strong> Normally, if you want a model to handle 2048 tokens, you have to train it on 2048 tokens. The researchers showed that a 1.3B-parameter ALiBi model trained only on short sequences (1024 tokens) matched the performance of a traditional sinusoidal model explicitly trained on long sequences (2048 tokens). Because the ALiBi model could achieve this while training on half the sequence length, it trained 11% faster and used 11% less memory.</p>
+<p><strong>Caveats.</strong> The bias is fixed, so the model cannot reshape it. A strong recency prior suits language modeling but may not suit every task. Later work reports that ALiBi’s extrapolation, while better than sinusoidal, is still limited rather than unbounded (for instance, the YaRN paper summarizes it as only “limited generalization”). Most recent open models moved to RoPE instead (Part 2).</p>
+</section>
+<section id="side-by-side" class="level2">
+<h2 class="anchored" data-anchor-id="side-by-side">7. Side by side</h2>
+<p>Note: “How Position is Modeled” indicates whether the method assigns a vector based on a token’s exact index (absolute) or only measures the distance between pairs of tokens (relative).</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Method</th>
+<th>Where position enters</th>
+<th>How Position is Modeled</th>
+<th>Extra parameters</th>
+<th>Beyond training length</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Sinusoidal</td>
+<td>added to input embeddings</td>
+<td>absolute</td>
+<td>none</td>
+<td>poor in practice</td>
+</tr>
+<tr class="even">
+<td>Learned absolute</td>
+<td>added to input embeddings</td>
+<td>absolute</td>
+<td><span class="math inline">\(L_{max}\times d\)</span></td>
+<td>impossible without retraining</td>
+</tr>
+<tr class="odd">
+<td>Shaw / T5 biases</td>
+<td>keys, values or attention scores</td>
+<td>relative</td>
+<td>small learned tables</td>
+<td>limited (clipped or bucketed)</td>
+</tr>
+<tr class="even">
+<td>ALiBi</td>
+<td>attention scores</td>
+<td>relative (fixed shape)</td>
+<td>none</td>
+<td>better than the above, still limited</td>
+</tr>
+<tr class="odd">
+<td>RoPE (Part 2)</td>
+<td>rotation of <span class="math inline">\(q\)</span>, <span class="math inline">\(k\)</span></td>
+<td>relative</td>
+<td>none</td>
+<td>needs scaling tricks (Part 3)</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="common-pitfalls" class="level2">
+<h2 class="anchored" data-anchor-id="common-pitfalls">Common pitfalls</h2>
+<ul>
+<li><strong>Assuming “defined for any position” means “works at any position.”</strong> The sinusoidal formula can be evaluated anywhere, but a model trained on short sequences still behaves poorly on long ones.</li>
+<li><strong>Scale mismatch when adding position to embeddings.</strong> The original Transformer multiplies the token embeddings by <span class="math inline">\(\sqrt{d}\)</span> before adding <span class="math inline">\(PE\)</span>, so the position signal does not drown out (or get drowned by) the content signal. Forgetting this kind of scaling changes training dynamics.</li>
+<li><strong>Index errors with learned tables.</strong> Inputs longer than <span class="math inline">\(L_{max}\)</span> raise an error or, worse, get silently truncated or clamped.</li>
+<li><strong>Thinking causal models are order-blind.</strong> The causal mask leaks a count-like signal, which is why removing positional encodings degrades causal models gracefully but breaks bidirectional ones.</li>
+</ul>
+</section>
+<section id="references" class="level2">
+<h2 class="anchored" data-anchor-id="references">References</h2>
+<ul>
+<li>Vaswani et al.&nbsp;(2017). <em>Attention Is All You Need.</em> arXiv:1706.03762. (Sinusoidal encoding, Section 3.5.)</li>
+<li>Devlin et al.&nbsp;(2019). <em>BERT.</em> arXiv:1810.04805. Radford et al.&nbsp;(2019), <em>Language Models are Unsupervised Multitask Learners</em> (GPT-2). (Learned absolute embeddings.)</li>
+<li>Shaw, Uszkoreit, Vaswani (2018). <em>Self-Attention with Relative Position Representations.</em> arXiv:1803.02155.</li>
+<li>Raffel et al.&nbsp;(2020). <em>Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer.</em> arXiv:1910.10683. (T5 relative bias.)</li>
+<li>Press, Smith, Lewis (2022). <em>Train Short, Test Long: Attention with Linear Biases Enables Input Length Extrapolation.</em> arXiv:2108.12409.</li>
+<li>Haviv, Ram, Press, Izsak, Levy (2022). <em>Transformer Language Models without Positional Encodings Still Learn Positional Information.</em> arXiv:2203.16634.</li>
+<li>Peng, Quesnelle, Fan, Shippole (2023). <em>YaRN: Efficient Context Window Extension of Large Language Models.</em> arXiv:2309.00071.</li>
+</ul>
+<hr>
+<p>This work adapts material from “The Hitchhiker’s Guide to Agentic AI” by Haggai Roitman (arXiv:2606.24937v3, book version 1.4), licensed under CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/). Changes: adapted into standalone articles, with added explanations, diagrams and examples. This work is licensed under CC BY-SA 4.0.</p>
+
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+<footer class="footer">
+  <div class="nav-footer">
+    <div class="nav-footer-left">
+      &nbsp;
+    </div>   
+    <div class="nav-footer-center">
+<p>Content licensed under <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a></p>
+</div>
+    <div class="nav-footer-right">
+      &nbsp;
+    </div>
+  </div>
+</footer>
+
+
+
+
+</body></html>

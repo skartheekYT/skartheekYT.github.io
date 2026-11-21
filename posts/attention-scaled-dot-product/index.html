@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.20">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="dcterms.date" content="2026-11-07">
+<meta name="description" content="How a token builds a new representation as a weighted mix of all the tokens around it: the intuition, the shapes, a worked example, and the reason for the √d_k scaling.">
+
+<title>Scaled Dot-Product Attention, Step by Step – Agentic AI Notes</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../../">
+<script src="../../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../../site_libs/quarto-html/popper.min.js"></script>
+<script src="../../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../../site_libs/quarto-html/quarto-syntax-highlighting-17888a1159294d3eb470f19f6f52f5a5.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../../site_libs/bootstrap/bootstrap-17e92714493fce31463ccfbbc8488715.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+<script src="../../site_libs/quarto-diagram/mermaid.min.js"></script>
+<script src="../../site_libs/quarto-diagram/mermaid-init.js"></script>
+<link href="../../site_libs/quarto-diagram/mermaid.css" rel="stylesheet">
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../../styles.css">
+</head>
+
+<body class="nav-fixed quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a class="navbar-brand" href="../../index.html">
+    <span class="navbar-title">Agentic AI Notes</span>
+    </a>
+  </div>
+            <div id="quarto-search" class="" title="Search"></div>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+  <span class="navbar-toggler-icon"></span>
+</button>
+          <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav navbar-nav-scroll me-auto">
+  <li class="nav-item">
+    <a class="nav-link" href="../../index.html"> 
+<span class="menu-text">Home</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../blog.html"> 
+<span class="menu-text">Articles</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../about.html"> 
+<span class="menu-text">About</span></a>
+  </li>  
+</ul>
+          </div> <!-- /navcollapse -->
+            <div class="quarto-navbar-tools">
+</div>
+      </div> <!-- /container-fluid -->
+    </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">On this page</h2>
+   
+  <ul>
+  <li><a href="#the-problem-attention-solves" id="toc-the-problem-attention-solves" class="nav-link active" data-scroll-target="#the-problem-attention-solves">The problem attention solves</a></li>
+  <li><a href="#intuition-a-soft-dictionary-lookup" id="toc-intuition-a-soft-dictionary-lookup" class="nav-link" data-scroll-target="#intuition-a-soft-dictionary-lookup">Intuition: a soft dictionary lookup</a></li>
+  <li><a href="#the-computation-with-shapes" id="toc-the-computation-with-shapes" class="nav-link" data-scroll-target="#the-computation-with-shapes">The computation, with shapes</a></li>
+  <li><a href="#a-worked-example" id="toc-a-worked-example" class="nav-link" data-scroll-target="#a-worked-example">A worked example</a></li>
+  <li><a href="#why-divide-by-sqrtd_k" id="toc-why-divide-by-sqrtd_k" class="nav-link" data-scroll-target="#why-divide-by-sqrtd_k">Why divide by <span class="math inline">\(\sqrt{d_k}\)</span>?</a></li>
+  <li><a href="#why-attention-instead-of-recurrence" id="toc-why-attention-instead-of-recurrence" class="nav-link" data-scroll-target="#why-attention-instead-of-recurrence">Why attention instead of recurrence?</a></li>
+  <li><a href="#a-minimal-implementation" id="toc-a-minimal-implementation" class="nav-link" data-scroll-target="#a-minimal-implementation">A minimal implementation</a></li>
+  <li><a href="#what-this-operation-does-not-do-yet" id="toc-what-this-operation-does-not-do-yet" class="nav-link" data-scroll-target="#what-this-operation-does-not-do-yet">What this operation does <em>not</em> do yet</a></li>
+  <li><a href="#common-pitfalls" id="toc-common-pitfalls" class="nav-link" data-scroll-target="#common-pitfalls">Common pitfalls</a></li>
+  <li><a href="#summary" id="toc-summary" class="nav-link" data-scroll-target="#summary">Summary</a></li>
+  <li><a href="#references" id="toc-references" class="nav-link" data-scroll-target="#references">References</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Scaled Dot-Product Attention, Step by Step</h1>
+<p class="subtitle lead">Queries, keys, values, and why we divide by √d_k</p>
+  <div class="quarto-categories">
+    <div class="quarto-category">LLM fundamentals</div>
+    <div class="quarto-category">Transformers</div>
+    <div class="quarto-category">Attention</div>
+  </div>
+  </div>
+
+<div>
+  <div class="description">
+    How a token builds a new representation as a weighted mix of all the tokens around it: the intuition, the shapes, a worked example, and the reason for the √d_k scaling.
+  </div>
+</div>
+
+
+<div class="quarto-title-meta">
+
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">November 7, 2026</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>This is the first of four articles on attention. After <a href="../../posts/tokenization-bpe/index.html">tokenization</a> and embeddings, every token is a vector. Attention is the operation that lets those vectors talk to each other, and it is the core of every Transformer. The next articles cover <a href="../../posts/attention-masks-encoder-decoder/index.html">masking, encoder-decoder and cross-attention</a>, <a href="../../posts/multi-head-attention/index.html">multi-head attention</a>, and <a href="../../posts/attention-cost-kv-cache/index.html">the cost of attention (KV cache, GQA, MLA)</a>.</p>
+<section id="the-problem-attention-solves" class="level2">
+<h2 class="anchored" data-anchor-id="the-problem-attention-solves">The problem attention solves</h2>
+<p>After the embedding layer, the word “bank” has the same vector in “river bank” and in “bank account”. The vector knows nothing about its neighbours. A language model needs each token’s representation to be <em>updated using the other tokens in the sequence</em>.</p>
+<p>Attention does exactly this, with one idea:</p>
+<blockquote class="blockquote">
+<p>Each token builds its new vector as a <strong>weighted average of information from all tokens</strong>, where the weights are computed from the content itself.</p>
+</blockquote>
+<p>A recurrent network passes information along the sequence one step at a time. Attention instead lets every position look at every other position directly. This is the design the original Transformer paper (Vaswani et al., 2017) proposed: an architecture built on attention alone, with no recurrence and no convolutions.</p>
+</section>
+<section id="intuition-a-soft-dictionary-lookup" class="level2">
+<h2 class="anchored" data-anchor-id="intuition-a-soft-dictionary-lookup">Intuition: a soft dictionary lookup</h2>
+<p>A Python dictionary does a <em>hard</em> lookup: the query must match a key exactly, and you get back one value.</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>d <span class="op">=</span> {<span class="st">"cat"</span>: v_cat, <span class="st">"dog"</span>: v_dog}</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>d[<span class="st">"cat"</span>]            <span class="co"># exact match -&gt; exactly one value</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Attention is a <strong>soft</strong> lookup. The query is compared with <em>every</em> key, each comparison gives a similarity score, and what you get back is a blend of <em>all</em> the values, weighted by those scores. Each token plays three roles:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Role</th>
+<th>Name</th>
+<th>Plain-language meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>What I am looking for</td>
+<td><strong>Query</strong> (Q)</td>
+<td>“Which other tokens are relevant to me?”</td>
+</tr>
+<tr class="even">
+<td>What I advertise for matching</td>
+<td><strong>Key</strong> (K)</td>
+<td>“This is what I look like to a query.”</td>
+</tr>
+<tr class="odd">
+<td>What I hand over if chosen</td>
+<td><strong>Value</strong> (V)</td>
+<td>“This is the content you get if you attend to me.”</td>
+</tr>
+</tbody>
+</table>
+<p>Why three separate roles instead of using the token vector directly? Because “what makes me a good match” and “what I contribute once matched” are different jobs, and the model is free to learn them separately. It also makes attention asymmetric: token A can attend strongly to token B without B attending to A.</p>
+</section>
+<section id="the-computation-with-shapes" class="level2">
+<h2 class="anchored" data-anchor-id="the-computation-with-shapes">The computation, with shapes</h2>
+<p>Let a sequence have <span class="math inline">\(n\)</span> tokens, each represented by a <span class="math inline">\(d\)</span>-dimensional vector. Stack them into a matrix <span class="math inline">\(X \in \mathbb{R}^{n \times d}\)</span> (one row per token). Attention uses three learned projection matrices to produce queries, keys and values:</p>
+<p><span class="math display">\[
+Q = X W^Q, \qquad K = X W^K, \qquad V = X W^V
+\]</span></p>
+<p>with <span class="math inline">\(W^Q, W^K \in \mathbb{R}^{d \times d_k}\)</span> and <span class="math inline">\(W^V \in \mathbb{R}^{d \times d_v}\)</span>. Then:</p>
+<p><span class="math display">\[
+\text{Attention}(Q, K, V) \;=\; \text{softmax}\!\left(\frac{Q K^{\top}}{\sqrt{d_k}}\right) V
+\]</span></p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Symbol</th>
+<th>Meaning</th>
+<th>Shape</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><span class="math inline">\(n\)</span></td>
+<td>number of tokens in the sequence</td>
+<td>—</td>
+</tr>
+<tr class="even">
+<td><span class="math inline">\(d\)</span></td>
+<td>width of the token vectors (the “model dimension”)</td>
+<td>—</td>
+</tr>
+<tr class="odd">
+<td><span class="math inline">\(d_k\)</span></td>
+<td>size of each query and key vector</td>
+<td>—</td>
+</tr>
+<tr class="even">
+<td><span class="math inline">\(d_v\)</span></td>
+<td>size of each value vector</td>
+<td>—</td>
+</tr>
+<tr class="odd">
+<td><span class="math inline">\(X\)</span></td>
+<td>input, one row per token</td>
+<td><span class="math inline">\(n \times d\)</span></td>
+</tr>
+<tr class="even">
+<td><span class="math inline">\(W^Q, W^K, W^V\)</span></td>
+<td>learned projection matrices</td>
+<td><span class="math inline">\(d \times d_k\)</span>, <span class="math inline">\(d \times d_k\)</span>, <span class="math inline">\(d \times d_v\)</span></td>
+</tr>
+<tr class="odd">
+<td><span class="math inline">\(Q, K, V\)</span></td>
+<td>queries, keys, values</td>
+<td><span class="math inline">\(n \times d_k\)</span>, <span class="math inline">\(n \times d_k\)</span>, <span class="math inline">\(n \times d_v\)</span></td>
+</tr>
+<tr class="even">
+<td><span class="math inline">\(S = QK^\top\)</span></td>
+<td>raw scores; entry <span class="math inline">\((i,j)\)</span> = how well query <span class="math inline">\(i\)</span> matches key <span class="math inline">\(j\)</span></td>
+<td><span class="math inline">\(n \times n\)</span></td>
+</tr>
+<tr class="odd">
+<td><span class="math inline">\(A\)</span></td>
+<td>attention weights = row-wise softmax of <span class="math inline">\(S/\sqrt{d_k}\)</span></td>
+<td><span class="math inline">\(n \times n\)</span></td>
+</tr>
+<tr class="even">
+<td><span class="math inline">\(O = AV\)</span></td>
+<td>output, one new vector per token</td>
+<td><span class="math inline">\(n \times d_v\)</span></td>
+</tr>
+</tbody>
+</table>
+<p>The pipeline in four steps:</p>
+<div class="cell" data-layout-align="default">
+<div class="cell-output-display">
+<div>
+<p></p><figure class="figure"><p></p>
+<div>
+<pre class="mermaid mermaid-js">flowchart LR
+  X["&lt;b&gt;Input&lt;/b&gt;&lt;br/&gt;X (n×d)"] --&gt; Q["&lt;b&gt;Queries&lt;/b&gt;&lt;br/&gt;Q = X·W_Q (n×d_k)"]
+  X --&gt; K["&lt;b&gt;Keys&lt;/b&gt;&lt;br/&gt;K = X·W_K (n×d_k)"]
+  X --&gt; V["&lt;b&gt;Values&lt;/b&gt;&lt;br/&gt;V = X·W_V (n×d_v)"]
+  Q --&gt; S["&lt;b&gt;1. Scores&lt;/b&gt;&lt;br/&gt;S = Q·Kᵀ (n×n)"]
+  K --&gt; S
+  S --&gt; SC["&lt;b&gt;2. Scale&lt;/b&gt;&lt;br/&gt;S / √d_k"]
+  SC --&gt; SM["&lt;b&gt;3. Softmax per row&lt;/b&gt;&lt;br/&gt;A (n×n), rows sum to 1"]
+  SM --&gt; O["&lt;b&gt;4. Weighted sum&lt;/b&gt;&lt;br/&gt;O = A·V (n×d_v)"]
+  V --&gt; O
+</pre>
+</div>
+<p></p></figure><p></p>
+</div>
+</div>
+</div>
+<ol type="1">
+<li><strong>Scores.</strong> <span class="math inline">\(QK^\top\)</span> takes the dot product of every query with every key. A large dot product means “these two vectors point in a similar direction”, which is the model’s notion of relevance.</li>
+<li><strong>Scale.</strong> Divide by <span class="math inline">\(\sqrt{d_k}\)</span> (explained below).</li>
+<li><strong>Softmax, per row.</strong> Turn each row of scores into positive weights that sum to 1. Row <span class="math inline">\(i\)</span> says how much token <span class="math inline">\(i\)</span> attends to each token.</li>
+<li><strong>Weighted sum.</strong> Multiply by <span class="math inline">\(V\)</span>: row <span class="math inline">\(i\)</span> of the output is the weighted average of all value vectors, using row <span class="math inline">\(i\)</span> of <span class="math inline">\(A\)</span> as the weights.</li>
+</ol>
+</section>
+<section id="a-worked-example" class="level2">
+<h2 class="anchored" data-anchor-id="a-worked-example">A worked example</h2>
+<p>Three tokens, <span class="math inline">\(d_k = d_v = 2\)</span>. Suppose the projections produced:</p>
+<p><span class="math display">\[
+Q = K = \begin{pmatrix} 1 &amp; 0 \\ 0 &amp; 1 \\ 1 &amp; 1 \end{pmatrix}, \qquad
+V = \begin{pmatrix} 1 &amp; 0 \\ 0 &amp; 2 \\ 2 &amp; 2 \end{pmatrix}
+\]</span></p>
+<p><strong>Scores</strong> <span class="math inline">\(S = QK^\top\)</span> (entry <span class="math inline">\((i,j)\)</span> = dot product of query <span class="math inline">\(i\)</span> with key <span class="math inline">\(j\)</span>):</p>
+<p><span class="math display">\[
+S = \begin{pmatrix} 1 &amp; 0 &amp; 1 \\ 0 &amp; 1 &amp; 1 \\ 1 &amp; 1 &amp; 2 \end{pmatrix}
+\]</span></p>
+<p><strong>Scale</strong> by <span class="math inline">\(\sqrt{d_k} = \sqrt{2} \approx 1.414\)</span>, then <strong>softmax each row</strong>. For row 1: <span class="math inline">\(\text{softmax}(0.71,\ 0,\ 0.71) = (0.40,\ 0.20,\ 0.40)\)</span>. Doing all rows (rounded to two decimals):</p>
+<p><span class="math display">\[
+A \approx \begin{pmatrix} 0.40 &amp; 0.20 &amp; 0.40 \\ 0.20 &amp; 0.40 &amp; 0.40 \\ 0.25 &amp; 0.25 &amp; 0.50 \end{pmatrix}
+\]</span></p>
+<p><strong>Weighted sum</strong> <span class="math inline">\(O = AV\)</span>. Row 1 is <span class="math inline">\(0.40\,(1,0) + 0.20\,(0,2) + 0.40\,(2,2) = (1.2,\ 1.2)\)</span>. All rows:</p>
+<p><span class="math display">\[
+O \approx \begin{pmatrix} 1.20 &amp; 1.20 \\ 1.00 &amp; 1.60 \\ 1.26 &amp; 1.50 \end{pmatrix}
+\]</span></p>
+<p>Things to notice:</p>
+<ul>
+<li>Every row of <span class="math inline">\(A\)</span> sums to 1, so each output is a genuine weighted average of the value vectors.</li>
+<li>Token 3 has the query <span class="math inline">\((1,1)\)</span>, which has a positive dot product with every key, and its largest weight (0.50) is on itself because its own key <span class="math inline">\((1,1)\)</span> matches best.</li>
+<li>The output has the same number of rows as the input (<span class="math inline">\(n\)</span>): attention maps a sequence of <span class="math inline">\(n\)</span> vectors to a sequence of <span class="math inline">\(n\)</span> vectors.</li>
+</ul>
+</section>
+<section id="why-divide-by-sqrtd_k" class="level2">
+<h2 class="anchored" data-anchor-id="why-divide-by-sqrtd_k">Why divide by <span class="math inline">\(\sqrt{d_k}\)</span>?</h2>
+<p>The paper’s explanation (Vaswani et al., 2017) is that for large <span class="math inline">\(d_k\)</span> the dot products grow large in magnitude, which pushes softmax into regions where its gradients are extremely small. The authors present this explicitly as a suspicion rather than a proven result, supported by the observation that, without scaling, dot-product attention did worse than additive attention at larger <span class="math inline">\(d_k\)</span> (Britz et al., 2017). Here is the reasoning behind it, in three steps.</p>
+<p><strong>Step 1: the size of a dot product grows with <span class="math inline">\(d_k\)</span>.</strong> Assume the components of a query <span class="math inline">\(q\)</span> and a key <span class="math inline">\(k\)</span> are independent random variables with mean 0 and variance 1. Then each product <span class="math inline">\(q_i k_i\)</span> has mean 0 and variance 1. The dot product <span class="math inline">\(q \cdot k = \sum_{i=1}^{d_k} q_i k_i\)</span> adds up <span class="math inline">\(d_k\)</span> independent terms, and variances of independent terms add:</p>
+<p><span class="math display">\[
+\text{Var}(q \cdot k) = d_k \quad\Longrightarrow\quad \text{standard deviation} = \sqrt{d_k}
+\]</span></p>
+<p>So with <span class="math inline">\(d_k = 64\)</span>, typical scores are spread over a range of about <span class="math inline">\(\pm 8\)</span>, not <span class="math inline">\(\pm 1\)</span>. (This assumption is a clean idealization, roughly right for freshly initialized vectors; it is the argument’s starting point, not a guarantee during training.)</p>
+<p><strong>Step 2: big scores make softmax nearly one-hot.</strong> Softmax exponentiates its inputs, so a gap of 8 between two scores means a weight ratio of <span class="math inline">\(e^8 \approx 3000\)</span>. One key grabs almost all the weight. We can check this numerically with random vectors:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> softmax(z, axis<span class="op">=-</span><span class="dv">1</span>):</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    z <span class="op">=</span> z <span class="op">-</span> z.<span class="bu">max</span>(axis<span class="op">=</span>axis, keepdims<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    e <span class="op">=</span> np.exp(z)</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> e <span class="op">/</span> e.<span class="bu">sum</span>(axis<span class="op">=</span>axis, keepdims<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>rng <span class="op">=</span> np.random.default_rng(<span class="dv">0</span>)</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>d_k <span class="op">=</span> <span class="dv">64</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="co"># 1) variance of a dot product grows with d_k</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>q <span class="op">=</span> rng.standard_normal((<span class="dv">100_000</span>, d_k))</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>k <span class="op">=</span> rng.standard_normal((<span class="dv">100_000</span>, d_k))</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>s <span class="op">=</span> (q <span class="op">*</span> k).<span class="bu">sum</span>(axis<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(s.var(), s.std(), (s <span class="op">/</span> np.sqrt(d_k)).std())   <span class="co"># 64.0  8.0  1.0</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a><span class="co"># 2) softmax saturation: 8 random keys per query</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>q <span class="op">=</span> rng.standard_normal((<span class="dv">1000</span>, d_k))</span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>K8 <span class="op">=</span> rng.standard_normal((<span class="dv">1000</span>, <span class="dv">8</span>, d_k))</span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>s <span class="op">=</span> np.einsum(<span class="st">"bd,bnd-&gt;bn"</span>, q, K8)</span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(softmax(s).<span class="bu">max</span>(axis<span class="op">=</span><span class="dv">1</span>).mean())                  <span class="co"># 0.88  (unscaled)</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(softmax(s <span class="op">/</span> np.sqrt(d_k)).<span class="bu">max</span>(axis<span class="op">=</span><span class="dv">1</span>).mean())   <span class="co"># 0.36  (scaled)</span></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a><span class="co"># 3) size of the softmax derivatives, J_ij = p_i (delta_ij - p_j)</span></span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> mean_abs_jacobian(p):</span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>    J <span class="op">=</span> p[:, :, <span class="va">None</span>] <span class="op">*</span> np.eye(<span class="dv">8</span>) <span class="op">-</span> p[:, :, <span class="va">None</span>] <span class="op">*</span> p[:, <span class="va">None</span>, :]</span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.<span class="bu">abs</span>(J).mean()</span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(mean_abs_jacobian(softmax(s)))                  <span class="co"># ~0.005 (unscaled)</span></span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(mean_abs_jacobian(softmax(s <span class="op">/</span> np.sqrt(d_k))))   <span class="co"># ~0.024 (scaled)</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Without scaling, the largest of 8 weights is on average 0.88 (almost one-hot). With scaling it is 0.36, a much softer distribution.</p>
+<p><strong>Step 3: a near-one-hot softmax has almost no gradient.</strong> For softmax outputs <span class="math inline">\(p\)</span>, the derivative of output <span class="math inline">\(p_i\)</span> with respect to input <span class="math inline">\(s_j\)</span> is <span class="math inline">\(p_i(\delta_{ij} - p_j)\)</span>, where <span class="math inline">\(\delta_{ij}\)</span> is 1 if <span class="math inline">\(i = j\)</span> and 0 otherwise. If <span class="math inline">\(p\)</span> is nearly one-hot, then for every <span class="math inline">\(i\)</span> either <span class="math inline">\(p_i \approx 0\)</span> or <span class="math inline">\(1 - p_i \approx 0\)</span>, so these derivatives all shrink toward zero. Learning stalls for that attention row. In the same simulation, the average size of a derivative entry is roughly 0.005 without scaling versus 0.024 with it, about 4 to 5 times smaller.</p>
+<p>Dividing by <span class="math inline">\(\sqrt{d_k}\)</span> rescales the variance of the scores back to 1, whatever <span class="math inline">\(d_k\)</span> is. That is the whole trick.</p>
+</section>
+<section id="why-attention-instead-of-recurrence" class="level2">
+<h2 class="anchored" data-anchor-id="why-attention-instead-of-recurrence">Why attention instead of recurrence?</h2>
+<p>The paper motivates self-attention with three desiderata: computation per layer, how much can run in parallel, and how short the path is between two distant positions (Vaswani et al., 2017). Their comparison (restated here), with <span class="math inline">\(n\)</span> = sequence length, <span class="math inline">\(d\)</span> = representation size, <span class="math inline">\(k\)</span> = convolution kernel size:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Layer type</th>
+<th>Computation per layer</th>
+<th>Sequential operations</th>
+<th>Longest path between two positions</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Self-attention</td>
+<td><span class="math inline">\(O(n^2 \cdot d)\)</span></td>
+<td><span class="math inline">\(O(1)\)</span></td>
+<td><span class="math inline">\(O(1)\)</span></td>
+</tr>
+<tr class="even">
+<td>Recurrent</td>
+<td><span class="math inline">\(O(n \cdot d^2)\)</span></td>
+<td><span class="math inline">\(O(n)\)</span></td>
+<td><span class="math inline">\(O(n)\)</span></td>
+</tr>
+<tr class="odd">
+<td>Convolutional</td>
+<td><span class="math inline">\(O(k \cdot n \cdot d^2)\)</span></td>
+<td><span class="math inline">\(O(1)\)</span></td>
+<td><span class="math inline">\(O(\log_k n)\)</span></td>
+</tr>
+</tbody>
+</table>
+<p>In plain words:</p>
+<ul>
+<li><strong>Sequential operations.</strong> A recurrent layer must process position 1, then 2, then 3, and so on, so it cannot parallelize across the sequence. Attention computes all positions at once as matrix multiplications, which is what GPUs are good at.</li>
+<li><strong>Path length.</strong> In a recurrent network, a signal from token 1 must pass through <span class="math inline">\(n-1\)</span> steps to reach token <span class="math inline">\(n\)</span>, and learning long-range dependencies is hard along such paths. In attention every pair of tokens is directly connected.</li>
+<li><strong>Cost.</strong> Attention is cheaper per layer than recurrence when <span class="math inline">\(n &lt; d\)</span>, which the paper notes is typical for sentence representations. When <span class="math inline">\(n\)</span> gets large the <span class="math inline">\(n^2\)</span> term hurts. That cost is the subject of <a href="../../posts/attention-cost-kv-cache/index.html">the fourth article</a>.</li>
+</ul>
+</section>
+<section id="a-minimal-implementation" class="level2">
+<h2 class="anchored" data-anchor-id="a-minimal-implementation">A minimal implementation</h2>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> softmax(z, axis<span class="op">=-</span><span class="dv">1</span>):</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    z <span class="op">=</span> z <span class="op">-</span> z.<span class="bu">max</span>(axis<span class="op">=</span>axis, keepdims<span class="op">=</span><span class="va">True</span>)      <span class="co"># subtract the max for numerical stability</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    e <span class="op">=</span> np.exp(z)</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> e <span class="op">/</span> e.<span class="bu">sum</span>(axis<span class="op">=</span>axis, keepdims<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> attention(Q, K, V):</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    d_k <span class="op">=</span> Q.shape[<span class="op">-</span><span class="dv">1</span>]</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    scores <span class="op">=</span> Q <span class="op">@</span> K.T <span class="op">/</span> np.sqrt(d_k)              <span class="co"># (n, n)</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    weights <span class="op">=</span> softmax(scores, axis<span class="op">=-</span><span class="dv">1</span>)           <span class="co"># each row sums to 1</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> weights <span class="op">@</span> V, weights                  <span class="co"># (n, d_v), (n, n)</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>Q <span class="op">=</span> K <span class="op">=</span> np.array([[<span class="fl">1.</span>, <span class="fl">0.</span>], [<span class="fl">0.</span>, <span class="fl">1.</span>], [<span class="fl">1.</span>, <span class="fl">1.</span>]])</span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>V <span class="op">=</span> np.array([[<span class="fl">1.</span>, <span class="fl">0.</span>], [<span class="fl">0.</span>, <span class="fl">2.</span>], [<span class="fl">2.</span>, <span class="fl">2.</span>]])</span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>out, w <span class="op">=</span> attention(Q, K, V)</span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(np.<span class="bu">round</span>(w, <span class="dv">2</span>))     <span class="co"># [[0.4  0.2  0.4 ] [0.2  0.4  0.4 ] [0.25 0.25 0.5 ]]</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(np.<span class="bu">round</span>(out, <span class="dv">2</span>))   <span class="co"># [[1.2  1.2 ] [1.   1.6 ] [1.26 1.5 ]]</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>This reproduces the worked example. In a real model <span class="math inline">\(Q\)</span>, <span class="math inline">\(K\)</span> and <span class="math inline">\(V\)</span> come from <span class="math inline">\(XW^Q\)</span>, <span class="math inline">\(XW^K\)</span>, <span class="math inline">\(XW^V\)</span> with learned weights, and many such operations run in parallel (next articles).</p>
+</section>
+<section id="what-this-operation-does-not-do-yet" class="level2">
+<h2 class="anchored" data-anchor-id="what-this-operation-does-not-do-yet">What this operation does <em>not</em> do yet</h2>
+<ul>
+<li><strong>It has no sense of order.</strong> If you shuffle the rows of <span class="math inline">\(X\)</span>, the rows of the output are shuffled in exactly the same way. Attention alone cannot tell “dog bites man” from “man bites dog”, so Transformers add <em>positional information</em> to the embeddings. That is the topic of a later article in this series.</li>
+<li><strong>It looks at every token, including the future.</strong> For text generation, a token must not see the tokens that come after it. That needs a <em>mask</em>, covered in the <a href="../../posts/attention-masks-encoder-decoder/index.html">next article</a>.</li>
+<li><strong>It produces one weighted average per token.</strong> <em>Multi-head attention</em> runs several of these in parallel, each with its own projections. See <a href="../../posts/multi-head-attention/index.html">the third article</a>.</li>
+</ul>
+</section>
+<section id="common-pitfalls" class="level2">
+<h2 class="anchored" data-anchor-id="common-pitfalls">Common pitfalls</h2>
+<ul>
+<li><strong>Softmax over the wrong axis.</strong> Softmax is applied along each <em>row</em> of <span class="math inline">\(S\)</span> (over the keys), so every query’s weights sum to 1. The columns do not sum to 1.</li>
+<li><strong>Dividing by <span class="math inline">\(d_k\)</span> instead of <span class="math inline">\(\sqrt{d_k}\)</span></strong>, or forgetting the scaling altogether. The model may still train, but the saturation problem above gets worse as <span class="math inline">\(d_k\)</span> grows.</li>
+<li><strong>Skipping numerical stabilization.</strong> Exponentiating large scores overflows, especially in 16-bit floats. Subtracting the row maximum before <code>exp</code> does not change the result and prevents it.</li>
+<li><strong>Mismatched dimensions.</strong> Queries and keys must have the same size <span class="math inline">\(d_k\)</span> (they are dotted together). Values can have a different size <span class="math inline">\(d_v\)</span>; the output has <span class="math inline">\(d_v\)</span> columns.</li>
+<li><strong>Reading attention maps as explanations.</strong> It is tempting to say “the model predicted this because it attended to that word”. Studies of attention in NLP models found that attention weights often do not correlate with other measures of feature importance, and that very different attention patterns can give the same prediction (Jain &amp; Wallace, 2019). The original paper’s own attention visualizations are presented in hedged terms: some heads <em>apparently</em> track sentence structure (Vaswani et al., 2017). Treat attention maps as a window onto the computation, not as a proof of reasoning.</li>
+<li><strong>Confusing the cost of the matrix with the cost of the layer.</strong> <span class="math inline">\(S\)</span> and <span class="math inline">\(A\)</span> are <span class="math inline">\(n \times n\)</span> per head per layer. For short inputs this is nothing; for long contexts it dominates.</li>
+</ul>
+</section>
+<section id="summary" class="level2">
+<h2 class="anchored" data-anchor-id="summary">Summary</h2>
+<ul>
+<li>Attention gives every token a new vector: a weighted average of all tokens’ <strong>values</strong>, with weights from how well its <strong>query</strong> matches their <strong>keys</strong>.</li>
+<li>Shapes: <span class="math inline">\(Q, K \in \mathbb{R}^{n \times d_k}\)</span>, <span class="math inline">\(V \in \mathbb{R}^{n \times d_v}\)</span>, scores and weights are <span class="math inline">\(n \times n\)</span>, output is <span class="math inline">\(n \times d_v\)</span>.</li>
+<li>Dividing by <span class="math inline">\(\sqrt{d_k}\)</span> keeps the score variance at 1, which keeps softmax away from saturation where gradients vanish.</li>
+<li>Compared with recurrence, attention parallelizes across positions and connects any two tokens in one step, at an <span class="math inline">\(O(n^2 \cdot d)\)</span> cost per layer.</li>
+</ul>
+</section>
+<section id="references" class="level2">
+<h2 class="anchored" data-anchor-id="references">References</h2>
+<ul>
+<li>Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, Ł., Polosukhin, I. (2017). <em>Attention Is All You Need.</em> NeurIPS 2017. <a href="https://arxiv.org/abs/1706.03762">arXiv:1706.03762</a>.</li>
+<li>Britz, D., Goldie, A., Luong, M.-T., Le, Q. V. (2017). <em>Massive Exploration of Neural Machine Translation Architectures.</em> <a href="https://arxiv.org/abs/1703.03906">arXiv:1703.03906</a>.</li>
+<li>Jain, S., Wallace, B. C. (2019). <em>Attention is not Explanation.</em> NAACL 2019. <a href="https://arxiv.org/abs/1902.10186">arXiv:1902.10186</a>.</li>
+<li>Roitman, H. <em>The Hitchhiker’s Guide to Agentic AI: From Foundations to Systems.</em> <a href="https://arxiv.org/abs/2606.24937">arXiv:2606.24937</a>.</li>
+</ul>
+<hr>
+<p>This work adapts material from “The Hitchhiker’s Guide to Agentic AI” by Haggai Roitman (arXiv:2606.24937v3, book version 1.4), licensed under CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/). Changes: adapted into standalone articles, with added explanations, diagrams and examples. This work is licensed under CC BY-SA 4.0.</p>
+
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+<footer class="footer">
+  <div class="nav-footer">
+    <div class="nav-footer-left">
+      &nbsp;
+    </div>   
+    <div class="nav-footer-center">
+<p>Content licensed under <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a></p>
+</div>
+    <div class="nav-footer-right">
+      &nbsp;
+    </div>
+  </div>
+</footer>
+
+
+
+
+</body></html>

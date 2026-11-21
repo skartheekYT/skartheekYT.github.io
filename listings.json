@@ -1,13 +1,53 @@
 [
   {
-    "listing": "/blog.html",
+    "listing": "/series/foundations-of-llms/index.html",
     "items": [
-      "/posts/anisotropy-whitening/index.html",
-      "/posts/anisotropy-whitening/derivation.html",
-      "/posts/anisotropy-whitening/mev-derivation.html",
-      "/posts/embeddings-token-vectors/index.html",
-      "/posts/tokenization-bpe/index.html",
-      "/posts/tokenization-bpe/wordpiece-likelihood-proof.html"
+      "/series/foundations-of-llms/01-tokenization-bpe/index.html",
+      "/series/foundations-of-llms/02-embeddings-token-vectors/index.html",
+      "/series/foundations-of-llms/03-anisotropy-whitening/index.html",
+      "/series/foundations-of-llms/04-attention-scaled-dot-product/index.html",
+      "/series/foundations-of-llms/05-attention-masks-encoder-decoder/index.html",
+      "/series/foundations-of-llms/06-multi-head-attention/index.html",
+      "/series/foundations-of-llms/07-attention-cost-kv-cache/index.html",
+      "/series/foundations-of-llms/08-positional-encoding-basics/index.html",
+      "/series/foundations-of-llms/09-rope-rotary-position-embedding/index.html",
+      "/series/foundations-of-llms/10-rope-context-extension/index.html"
+    ]
+  },
+  {
+    "listing": "/index.html",
+    "items": [
+      "/series/foundations-of-llms/10-rope-context-extension/index.html",
+      "/series/foundations-of-llms/09-rope-rotary-position-embedding/index.html",
+      "/series/foundations-of-llms/08-positional-encoding-basics/index.html",
+      "/series/foundations-of-llms/07-attention-cost-kv-cache/index.html",
+      "/series/foundations-of-llms/06-multi-head-attention/index.html",
+      "/series/foundations-of-llms/05-attention-masks-encoder-decoder/index.html",
+      "/series/foundations-of-llms/04-attention-scaled-dot-product/index.html",
+      "/series/foundations-of-llms/03-anisotropy-whitening/index.html",
+      "/series/foundations-of-llms/02-embeddings-token-vectors/index.html",
+      "/series/foundations-of-llms/01-tokenization-bpe/index.html"
+    ]
+  },
+  {
+    "listing": "/series.html",
+    "items": [
+      "/series/foundations-of-llms/index.html"
+    ]
+  },
+  {
+    "listing": "/articles.html",
+    "items": [
+      "/series/foundations-of-llms/10-rope-context-extension/index.html",
+      "/series/foundations-of-llms/09-rope-rotary-position-embedding/index.html",
+      "/series/foundations-of-llms/08-positional-encoding-basics/index.html",
+      "/series/foundations-of-llms/07-attention-cost-kv-cache/index.html",
+      "/series/foundations-of-llms/06-multi-head-attention/index.html",
+      "/series/foundations-of-llms/05-attention-masks-encoder-decoder/index.html",
+      "/series/foundations-of-llms/04-attention-scaled-dot-product/index.html",
+      "/series/foundations-of-llms/03-anisotropy-whitening/index.html",
+      "/series/foundations-of-llms/02-embeddings-token-vectors/index.html",
+      "/series/foundations-of-llms/01-tokenization-bpe/index.html"
     ]
   }
 ]

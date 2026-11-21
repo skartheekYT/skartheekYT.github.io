@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.20">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="dcterms.date" content="2026-11-12">
+<meta name="description" content="A step-by-step derivation of the 2D rotary solution and of the long-term decay bound from the RoFormer paper, with the assumptions made explicit.">
+
+<title>RoPE Companion: Where the Rotation Comes From, and the Decay Bound – Agentic AI Notes</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+</style>
+
+
+<script src="../../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../../">
+<script src="../../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../../site_libs/quarto-html/popper.min.js"></script>
+<script src="../../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../../site_libs/quarto-html/quarto-syntax-highlighting-17888a1159294d3eb470f19f6f52f5a5.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../../site_libs/bootstrap/bootstrap-17e92714493fce31463ccfbbc8488715.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../../styles.css">
+</head>
+
+<body class="nav-fixed quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a class="navbar-brand" href="../../index.html">
+    <span class="navbar-title">Agentic AI Notes</span>
+    </a>
+  </div>
+            <div id="quarto-search" class="" title="Search"></div>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+  <span class="navbar-toggler-icon"></span>
+</button>
+          <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav navbar-nav-scroll me-auto">
+  <li class="nav-item">
+    <a class="nav-link" href="../../index.html"> 
+<span class="menu-text">Home</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../blog.html"> 
+<span class="menu-text">Articles</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../about.html"> 
+<span class="menu-text">About</span></a>
+  </li>  
+</ul>
+          </div> <!-- /navcollapse -->
+            <div class="quarto-navbar-tools">
+</div>
+      </div> <!-- /container-fluid -->
+    </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">On this page</h2>
+   
+  <ul>
+  <li><a href="#setting-up-the-2d-problem" id="toc-setting-up-the-2d-problem" class="nav-link active" data-scroll-target="#setting-up-the-2d-problem">1. Setting up the 2D problem</a></li>
+  <li><a href="#solving-it" id="toc-solving-it" class="nav-link" data-scroll-target="#solving-it">2. Solving it</a></li>
+  <li><a href="#the-long-term-decay-bound" id="toc-the-long-term-decay-bound" class="nav-link" data-scroll-target="#the-long-term-decay-bound">3. The long-term decay bound</a>
+  <ul class="collapse">
+  <li><a href="#why-the-bound-shrinks-with-distance" id="toc-why-the-bound-shrinks-with-distance" class="nav-link" data-scroll-target="#why-the-bound-shrinks-with-distance">3.1 Why the Bound Shrinks with Distance</a></li>
+  <li><a href="#caveats-and-what-the-bound-actually-means" id="toc-caveats-and-what-the-bound-actually-means" class="nav-link" data-scroll-target="#caveats-and-what-the-bound-actually-means">3.2 Caveats and What the Bound Actually Means</a></li>
+  <li><a href="#how-models-bypass-decay-concentrating-energy-in-slow-pairs" id="toc-how-models-bypass-decay-concentrating-energy-in-slow-pairs" class="nav-link" data-scroll-target="#how-models-bypass-decay-concentrating-energy-in-slow-pairs">3.3 How Models Bypass Decay: Concentrating Energy in Slow Pairs</a></li>
+  </ul></li>
+  <li><a href="#references" id="toc-references" class="nav-link" data-scroll-target="#references">References</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">RoPE Companion: Where the Rotation Comes From, and the Decay Bound</h1>
+  <div class="quarto-categories">
+    <div class="quarto-category">LLMs</div>
+    <div class="quarto-category">positional-encoding</div>
+    <div class="quarto-category">RoPE</div>
+    <div class="quarto-category">math</div>
+  </div>
+  </div>
+
+<div>
+  <div class="description">
+    A step-by-step derivation of the 2D rotary solution and of the long-term decay bound from the RoFormer paper, with the assumptions made explicit.
+  </div>
+</div>
+
+
+<div class="quarto-title-meta">
+
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">November 12, 2026</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>This page backs up <a href="../../posts/rope-rotary-position-embedding/index.html">Part 2</a>. It re-derives two results from the RoFormer paper (Su et al., 2021, Sections 3.4.1 and 3.4.3) and spells out which steps are forced and which are choices.</p>
+<section id="setting-up-the-2d-problem" class="level2">
+<h2 class="anchored" data-anchor-id="setting-up-the-2d-problem">1. Setting up the 2D problem</h2>
+<p>Identify a 2D vector <span class="math inline">\((a,b)\in\mathbb{R}^2\)</span> with the complex number <span class="math inline">\(a+\mathrm{i}b\)</span>. For complex <span class="math inline">\(u,v\)</span> the usual dot product of the corresponding 2D vectors is <span class="math inline">\(\mathrm{Re}(u\bar v)\)</span>, where <span class="math inline">\(\bar v\)</span> is the complex conjugate.</p>
+<p>Let <span class="math inline">\(q = W_q x_m\)</span> and <span class="math inline">\(k = W_k x_n\)</span> be the content-only query and key (complex numbers), and let <span class="math inline">\(f_q(x_m,m)\)</span>, <span class="math inline">\(f_k(x_n,n)\)</span> be the position-aware versions. We require:</p>
+<ul>
+<li><strong>(Initial condition)</strong> with no position, nothing changes: <span class="math inline">\(q=f_q(x_m,0)=W_q x_m\)</span> and <span class="math inline">\(k=f_k(x_n,0)=W_k x_n\)</span>.</li>
+<li><strong>(Relative-only)</strong> the complex product <span class="math inline">\(f_q(x_m,m)\,\overline{f_k(x_n,n)}\)</span> depends on the positions only through <span class="math inline">\(m-n\)</span>: it equals some function <span class="math inline">\(G(x_m,x_n,m-n)\)</span>. Its real part is the dot product we care about. (Asking for the whole complex product to be relative-only is slightly stronger than asking for its real part to be, and it is what the paper does.)</li>
+</ul>
+<p>Write everything in polar form, <span class="math inline">\(f_q = r_q e^{\mathrm{i}\alpha_q}\)</span>, <span class="math inline">\(f_k = r_k e^{\mathrm{i}\alpha_k}\)</span>, <span class="math inline">\(G = r_G e^{\mathrm{i}\alpha_G}\)</span>, where <span class="math inline">\(r\)</span> is a length and <span class="math inline">\(\alpha\)</span> an angle. The product condition splits into a statement about lengths and a statement about angles:</p>
+<p><span class="math display">\[
+r_q(x_m,m)\,r_k(x_n,n) = r_G(x_m,x_n,m-n), \qquad
+\alpha_q(x_m,m)-\alpha_k(x_n,n) = \alpha_G(x_m,x_n,m-n) \tag{1}
+\]</span></p>
+<p>The initial condition specifies that at position <span class="math inline">\(0\)</span>, the functions reduce to the base content projections. If we express the base queries and keys in polar form as <span class="math inline">\(q = \|q\|e^{\mathrm{i}\varphi_q}\)</span> and <span class="math inline">\(k = \|k\|e^{\mathrm{i}\varphi_k}\)</span>, equating them to our position-aware functions at <span class="math inline">\(m=0\)</span> and <span class="math inline">\(n=0\)</span> explicitly pins down the initial radii and angles:</p>
+<p><span class="math display">\[
+r_q(x_m,0) = \|q\|, \qquad r_k(x_n,0) = \|k\|
+\]</span> <span class="math display">\[
+\alpha_q(x_m,0) = \varphi_q, \qquad \alpha_k(x_n,0) = \varphi_k \tag{2}
+\]</span></p>
+</section>
+<section id="solving-it" class="level2">
+<h2 class="anchored" data-anchor-id="solving-it">2. Solving it</h2>
+<p>Set <span class="math inline">\(m=n\)</span>. Then <span class="math inline">\(m-n=0\)</span>, so the right-hand sides of (1) no longer depend on the position:</p>
+<p><span class="math display">\[
+r_q(x_m,m)\,r_k(x_n,m) = r_G(x_m,x_n,0) = r_q(x_m,0)\,r_k(x_n,0) = \|q\|\|k\|
+\]</span> <span class="math display">\[
+\alpha_q(x_m,m)-\alpha_k(x_n,m) = \alpha_G(x_m,x_n,0) = \varphi_q-\varphi_k
+\]</span></p>
+<p><strong>Lengths.</strong> The first equation only fixes the product of the two radii. The simplest solution, and the one the paper takes, keeps each radius at its position-0 value: <span class="math inline">\(r_q(x_m,m)=\|q\|\)</span> and <span class="math inline">\(r_k(x_n,n)=\|k\|\)</span>. This is a choice, but a natural one, because a pure rotation never changes lengths.</p>
+<p><strong>Angles.</strong> The second equation says <span class="math inline">\(\alpha_q(x_m,m)-\varphi_q = \alpha_k(x_n,m)-\varphi_k\)</span>. Because the content vectors <span class="math inline">\(x_m\)</span> and <span class="math inline">\(x_n\)</span> are independent of each other, this equality demonstrates that for a fixed position <span class="math inline">\(m\)</span>, the difference between the position-aware angle and the base content angle is identical for all query and key vectors, regardless of their content. We can therefore define this common, position-dependent shift as <span class="math inline">\(\phi(m)\)</span>. So the position shifts every angle by the same position-only amount: <span class="math inline">\(\alpha_q = \varphi_q + \phi(m)\)</span> and <span class="math inline">\(\alpha_k=\varphi_k+\phi(n)\)</span>. The initial condition gives <span class="math inline">\(\phi(0)=0\)</span>.</p>
+<p><strong>Pin down <span class="math inline">\(\phi\)</span>.</strong> Plug these into the angle part of (1) with <span class="math inline">\(n=m-1\)</span>:</p>
+<p><span class="math display">\[
+\phi(m)-\phi(m-1) = \alpha_G(x_m,x_{m-1},1)-\varphi_q+\varphi_k
+\]</span></p>
+<p>The right-hand side does not depend on the position <span class="math inline">\(m\)</span>, so <span class="math inline">\(\phi\)</span> increases by the same constant each step. Call that constant <span class="math inline">\(\theta\)</span>. An integer sequence with constant increments is an arithmetic progression, and with <span class="math inline">\(\phi(0)=0\)</span>:</p>
+<p><span class="math display">\[
+\phi(m) = m\theta
+\]</span></p>
+<p>(<span class="math inline">\(\theta=0\)</span> would mean no position information at all, so <span class="math inline">\(\theta\neq 0\)</span>.)</p>
+<p><strong>Result.</strong></p>
+<p><span class="math display">\[
+f_q(x_m,m) = (W_q x_m)\,e^{\mathrm{i}m\theta},\qquad
+f_k(x_n,n) = (W_k x_n)\,e^{\mathrm{i}n\theta},\qquad
+\mathrm{Re}\!\left[f_q\overline{f_k}\right]=\mathrm{Re}\!\left[(W_qx_m)\overline{(W_kx_n)}\,e^{\mathrm{i}(m-n)\theta}\right]
+\]</span></p>
+<p>Multiplying by <span class="math inline">\(e^{\mathrm{i}m\theta}\)</span> is a rotation by <span class="math inline">\(m\theta\)</span>, which is the matrix form used in Part 2.</p>
+<p><strong>What was assumed.</strong> This is <em>a</em> solution, not the only one: it relies on the initial condition, on the stronger complex form of the relative-only requirement, and on the choice of position-independent radii. In <span class="math inline">\(d\)</span> dimensions the paper applies the 2D solution to each of the <span class="math inline">\(d/2\)</span> pairs separately and picks the frequencies <span class="math inline">\(\theta_i=10000^{-2i/d}\)</span> following the sinusoidal encoding. That choice is motivated by tradition and by the decay property below, not derived from the requirement.</p>
+</section>
+<section id="the-long-term-decay-bound" class="level2">
+<h2 class="anchored" data-anchor-id="the-long-term-decay-bound">3. The long-term decay bound</h2>
+<p>In <span class="math inline">\(d\)</span> dimensions, group the entries of <span class="math inline">\(q=W_qx_m\)</span> and <span class="math inline">\(k=W_kx_n\)</span> into <span class="math inline">\(d/2\)</span> complex pairs <span class="math inline">\(q_i,k_i\in\mathbb{C}\)</span> (<span class="math inline">\(i=0,\dots,d/2-1\)</span>). With <span class="math inline">\(\Delta=m-n\)</span>, the RoPE score is</p>
+<p><span class="math display">\[
+\tilde q_m^\top\tilde k_n = \mathrm{Re}\Big[\sum_{i=0}^{d/2-1} h_i\,e^{\mathrm{i}\Delta\theta_i}\Big],\qquad h_i = q_i\overline{k_i}
+\]</span></p>
+<p>where, <span class="math inline">\(q_m = f_q(x_m, m)\)</span> and <span class="math inline">\(k_n = f_k(x_n, n)\)</span></p>
+<p>Define the partial sums <span class="math inline">\(S_j = \sum_{i=0}^{j-1}e^{\mathrm{i}\Delta\theta_i}\)</span>, and let <span class="math inline">\(S_0=0\)</span> and <span class="math inline">\(h_{d/2}=0\)</span>. By simply expanding the products and regrouping the terms to shift the difference from the <span class="math inline">\(S\)</span> terms to the <span class="math inline">\(h\)</span> terms (a technique known as <strong>Abel summation</strong>) we get:</p>
+<p><span class="math display">\[
+\sum_{i=0}^{d/2-1}h_i\,(S_{i+1}-S_i) \;=\; -\sum_{i=0}^{d/2-1}S_{i+1}\,(h_{i+1}-h_i)
+\]</span></p>
+<p>The LHS is exactly the score sum, since <span class="math inline">\(e^{\mathrm{i}\Delta\theta_i}=S_{i+1}-S_i\)</span>. Taking absolute values and using the triangle inequality:</p>
+<p><span class="math display">\[
+\Big|\sum_i h_i e^{\mathrm{i}\Delta\theta_i}\Big|
+\le \sum_i |S_{i+1}|\,|h_{i+1}-h_i|
+\le \Big(\max_i |h_{i+1}-h_i|\Big)\sum_{i=0}^{d/2-1}|S_{i+1}|
+\]</span></p>
+<p>So the score is bounded by (how much the pair products <span class="math inline">\(h_i\)</span> vary from pair to pair) times <span class="math inline">\(\sum_j|S_j|\)</span>. The first factor depends on the particular <span class="math inline">\(q\)</span> and <span class="math inline">\(k\)</span>. The second depends only on the distance <span class="math inline">\(\Delta\)</span> and the frequencies. The paper’s claim is that the average <span class="math inline">\(\frac{2}{d}\sum_j|S_j|\)</span> shrinks as <span class="math inline">\(|\Delta|\)</span> grows when <span class="math inline">\(\theta_i=10000^{-2i/d}\)</span>, and it shows this in a plot.</p>
+<section id="why-the-bound-shrinks-with-distance" class="level3">
+<h3 class="anchored" data-anchor-id="why-the-bound-shrinks-with-distance">3.1 Why the Bound Shrinks with Distance</h3>
+<p>At <span class="math inline">\(\Delta=0\)</span>, all terms <span class="math inline">\(e^{\mathrm{i}\Delta\theta_i}\)</span> equal <span class="math inline">\(1\)</span>. This means the partial sums are simply <span class="math inline">\(|S_j|=j\)</span>, and their average across all dimensions is exactly <span class="math inline">\((d/2+1)/2\)</span>.</p>
+<p>To understand why this average drops as <span class="math inline">\(\Delta\)</span> grows, shift perspective and treat <span class="math inline">\(\theta\)</span> as a continuous variable, looking at the terms <span class="math inline">\(e^{\mathrm{i}\Delta\theta}\)</span>. In this <span class="math inline">\(\theta\)</span>-space, the function oscillates with a period of <span class="math inline">\(2\pi/\Delta\)</span>.</p>
+<p>The base frequencies <span class="math inline">\(\theta_i = 10000^{-2i/d}\)</span> span a range from <span class="math inline">\(1\)</span> down to <span class="math inline">\(0.0001\)</span>. As the relative distance <span class="math inline">\(\Delta\)</span> increases, the period <span class="math inline">\(2\pi/\Delta\)</span> shrinks rapidly. This forces the function to oscillate many times across the available <span class="math inline">\(\theta\)</span> range. When you sum over these highly oscillatory complex values, the vectors point in all different directions around the unit circle and largely cancel each other out through destructive interference.</p>
+<p>However, this is an intuitive heuristic rather than a conclusive mathematical proof. If this were a continuous integration over a uniform range (<span class="math inline">\(\int e^{\mathrm{i}\Delta\theta} d\theta\)</span>), the cancellations would be clean and the value would decay smoothly toward zero. But RoPE computes a discrete sum over exponentially spaced points. This non-uniform sampling means the cancellation is imperfect, which is probably why the sum doesn’t perfectly decay to zero, but instead hits a messy, oscillating plateau.</p>
+<p>Here is our plot of the average for <span class="math inline">\(d=128\)</span>:</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="decay-bound.svg" class="img-fluid figure-img"></p>
+<figcaption>Average partial-sum magnitude versus relative distance. It falls from <span class="math inline">\(32.5\)</span> at <span class="math inline">\(\Delta=0\)</span> to between about <span class="math inline">\(6.4\)</span> and <span class="math inline">\(11.6\)</span> over the range <span class="math inline">\(100\le\Delta\le 256\)</span>, oscillating as it goes.</figcaption>
+</figure>
+</div>
+</section>
+<section id="caveats-and-what-the-bound-actually-means" class="level3">
+<h3 class="anchored" data-anchor-id="caveats-and-what-the-bound-actually-means">3.2 Caveats and What the Bound Actually Means</h3>
+<p>This result describes a trend in an upper bound, not a strict guarantee about actual attention scores. When interpreting this decay, keep three limitations in mind:</p>
+<ul>
+<li><strong>The bound is data-dependent.</strong> The upper bound is a product of the distance factor <span class="math inline">\(\sum_i |S_{i+1}|\)</span> and a content-dependent factor <span class="math inline">\(\max_i |h_{i+1}-h_i|\)</span>, which is governed by the input tokens and the learned weights <span class="math inline">\(W_q, W_k\)</span>. If the pairwise products <span class="math inline">\(h_i\)</span> vary sharply from one pair to the next, that maximum difference can easily overpower the shrinking distance factor.</li>
+<li><strong>The plateau never reaches zero.</strong> Like the plot showed, the distance term drops from <span class="math inline">\(32.5\)</span> down to a floor of roughly <span class="math inline">\(6.4\)</span> to <span class="math inline">\(11.6\)</span>, and then just oscillates. Because the bound never asymptotes to <span class="math inline">\(0\)</span>, RoPE inherently cannot force distant tokens to have a zero attention score. It only applies a mild, structural suppression.</li>
+<li><strong>Trained models can concentrate energy in the slow pairs.</strong> Because different dimension pairs rotate at vastly different speeds, a trained model can bypass the decay entirely by routing long-range information into the slowest-rotating dimensions.</li>
+</ul>
+</section>
+<section id="how-models-bypass-decay-concentrating-energy-in-slow-pairs" class="level3">
+<h3 class="anchored" data-anchor-id="how-models-bypass-decay-concentrating-energy-in-slow-pairs">3.3 How Models Bypass Decay: Concentrating Energy in Slow Pairs</h3>
+<p>To see how a model circumvents the decay bound in practice, look at how the full <span class="math inline">\(d\)</span>-dimensional dot product is assembled from individual 2D pairs.</p>
+<p>RoPE partitions the <span class="math inline">\(d\)</span> coordinates of <span class="math inline">\(q = W_q x_m\)</span> and <span class="math inline">\(k = W_k x_n\)</span> into <span class="math inline">\(d/2\)</span> disjoint 2D pairs: <span class="math inline">\((0,1), (2,3), \dots, (d-2, d-1)\)</span>. Let <span class="math inline">\(q^{(i)}, k^{(i)} \in \mathbb{R}^2\)</span> be the <span class="math inline">\(i\)</span>-th pair before rotation, with lengths <span class="math inline">\(\|q^{(i)}\|, \|k^{(i)}\|\)</span> and an initial content angle <span class="math inline">\(\psi_i = \varphi_q^{(i)} - \varphi_k^{(i)}\)</span> between them.</p>
+<p>When RoPE rotates <span class="math inline">\(q^{(i)}\)</span> by <span class="math inline">\(m\theta_i\)</span> and <span class="math inline">\(k^{(i)}\)</span> by <span class="math inline">\(n\theta_i\)</span>, their lengths stay fixed while the angle between them shifts by <span class="math inline">\((m-n)\theta_i = \Delta\theta_i\)</span>. Summing the standard 2D dot products across all <span class="math inline">\(d/2\)</span> pairs gives the full RoPE attention score:</p>
+<p><span class="math display">\[
+\tilde{q}_m^\top \tilde{k}_n = \sum_{i=0}^{d/2-1} \|q^{(i)}\| \|k^{(i)}\| \cos(\psi_i + \Delta\theta_i)
+\]</span></p>
+<p>Each term in this sum has two distinct components:</p>
+<ol type="1">
+<li><strong>The pair magnitude <span class="math inline">\(\|q^{(i)}\| \|k^{(i)}\|\)</span> (“energy”):</strong> How large the numbers are in pair <span class="math inline">\(i\)</span>. This acts as a volume knob controlling how much pair <span class="math inline">\(i\)</span> contributes to the total attention score, and it is controlled entirely by rows <span class="math inline">\(2i\)</span> and <span class="math inline">\(2i+1\)</span> of the learned matrices <span class="math inline">\(W_q\)</span> and <span class="math inline">\(W_k\)</span>.</li>
+<li><strong>The rotation factor <span class="math inline">\(\cos(\psi_i + \Delta\theta_i)\)</span>:</strong> How aligned the pair remains after being twisted across distance <span class="math inline">\(\Delta\)</span> at frequency <span class="math inline">\(\theta_i = 10000^{-2i/d}\)</span>.</li>
+</ol>
+<p>Because <span class="math inline">\(\theta_i\)</span> decays exponentially with <span class="math inline">\(i\)</span>, the early pairs and late pairs behave completely differently over long distances:</p>
+<ul>
+<li><strong>Fast pairs (small <span class="math inline">\(i\)</span>):</strong> Pair <span class="math inline">\(i=0\)</span> has <span class="math inline">\(\theta_0 = 1\text{ rad/token}\)</span> (<span class="math inline">\(\approx 57.3^\circ\text{/token}\)</span>), completing a full rotation every <span class="math inline">\(\lambda_0 = 2\pi \approx 6.28\)</span> tokens. Over long distances like <span class="math inline">\(\Delta = 2000\)</span>, <span class="math inline">\(\cos(\Delta\theta_0)\)</span> oscillates wildly between <span class="math inline">\(+1\)</span> and <span class="math inline">\(-1\)</span>, turning the pair’s contribution into high-frequency noise.</li>
+<li><strong>Slow pairs (large <span class="math inline">\(i\)</span>):</strong> A late pair with a wavelength of <span class="math inline">\(\lambda_i = 60,000\)</span> tokens has <span class="math inline">\(\theta_i = 2\pi / 60,000\)</span>. Even across a distance of <span class="math inline">\(\Delta = 2000\)</span> tokens, the vector rotates by only <span class="math inline">\(\Delta\theta_i = \pi/15\text{ rad} = 12^\circ\)</span>. Since <span class="math inline">\(\cos(12^\circ) \approx 0.978\)</span>, nearly <span class="math inline">\(98\%\)</span> of the aligned dot product survives intact.</li>
+</ul>
+<section id="a-concrete-d4-example" class="level4">
+<h4 class="anchored" data-anchor-id="a-concrete-d4-example">3.3.1 A Concrete <span class="math inline">\(d=4\)</span> Example</h4>
+<p>Suppose <span class="math inline">\(d=4\)</span>, giving just two pairs: Pair <span class="math inline">\(0\)</span> (fast) and Pair <span class="math inline">\(1\)</span> (slow, with <span class="math inline">\(\Delta\theta_1 = 12^\circ\)</span> at <span class="math inline">\(\Delta = 2000\)</span>). Suppose a pronoun at position <span class="math inline">\(m=2000\)</span> needs to attend strongly to a noun at <span class="math inline">\(n=0\)</span> (<span class="math inline">\(\Delta = 2000\)</span>), and the content projections are perfectly aligned in both pairs (<span class="math inline">\(\psi_0 = \psi_1 = 0\)</span>).</p>
+<ul>
+<li><strong>Case A (Equal energy across pairs):</strong> Suppose <span class="math inline">\(W_q\)</span> and <span class="math inline">\(W_k\)</span> assign unit length to both pairs, <span class="math inline">\(q = k = [1, 0, \; 1, 0]\)</span>. Both pairs have <span class="math inline">\(\|q^{(i)}\|\|k^{(i)}\| = 1\)</span>, and the unrotated dot product (<span class="math inline">\(\Delta=0\)</span>) is <span class="math inline">\(1 + 1 = 2\)</span>. At <span class="math inline">\(\Delta = 2000\)</span>, the fast pair spins to some arbitrary value—say <span class="math inline">\(\cos(2000\theta_0) \approx -0.8\)</span>—while the slow pair stays near <span class="math inline">\(\cos(12^\circ) \approx 0.98\)</span>. The total score drops to: <span class="math display">\[
+\tilde{q}_m^\top \tilde{k}_n = (1 \times -0.8) + (1 \times 0.98) = 0.18
+\]</span></li>
+<li><strong>Case B (Energy concentrated in the slow pair):</strong> During training, gradient descent is penalized if the model fails to connect the pronoun to the distant noun. To prevent the fast pair from corrupting the long-range score, the optimizer can update <span class="math inline">\(W_q\)</span> and <span class="math inline">\(W_k\)</span> to zero out rows <span class="math inline">\(0,1\)</span> and scale up rows <span class="math inline">\(2,3\)</span>, producing <span class="math inline">\(q = k = [0, 0, \; \sqrt{2}, 0]\)</span>. The total vector norm is unchanged (<span class="math inline">\(\|q\| = \|k\| = \sqrt{2}\)</span>), and the <span class="math inline">\(\Delta=0\)</span> score is still <span class="math inline">\(2\)</span>. Now, at <span class="math inline">\(\Delta = 2000\)</span>, the fast pair’s wild rotation is multiplied by zero magnitude, while the slow pair carries all the weight: <span class="math display">\[
+\tilde{q}_m^\top \tilde{k}_n = (0 \times -0.8) + (2 \times 0.98) = 1.96
+\]</span></li>
+</ul>
+<p>In terms of the Abel summation bound, setting <span class="math inline">\(h_0 = 0\)</span> and <span class="math inline">\(h_1 = 2\)</span> eliminates the cancellation between pairs and inflates the data-dependent factor <span class="math inline">\(\max_i |h_{i+1}-h_i|\)</span>. In practice, trained transformers naturally learn this division of labor: they use fast-rotating pairs to attend to local syntax and immediate neighbors, while routing long-range semantic dependencies into slow-rotating pairs where RoPE’s decay is too weak to erase them.</p>
+<p>As the RoFormer authors note in their limitations section, while the decay bound provides useful intuition for why uniformly distributed features fade with distance, there is still no complete theoretical explanation for why RoPE empirically outperforms other position encodings on long texts.</p>
+<p><strong>How to read this.</strong> It is a trend in an upper bound, not a guarantee about actual attention. The bound has a data-dependent factor (<span class="math inline">\(|h_{i+1}-h_i|\)</span>), the plateau does not go to zero, and a trained model can put its query and key energy in the slow pairs (small <span class="math inline">\(\theta_i\)</span>) where this decay is weak. The paper’s limitations section also notes that the authors have no faithful explanation of why RoPE does better on long texts than other methods.</p>
+</section>
+</section>
+</section>
+<section id="references" class="level2">
+<h2 class="anchored" data-anchor-id="references">References</h2>
+<ul>
+<li>Su, Lu, Pan, Murtadha, Wen, Liu (2021). <em>RoFormer: Enhanced Transformer with Rotary Position Embedding.</em> arXiv:2104.09864, Sections 3.4.1 and 3.4.3.</li>
+</ul>
+<hr>
+<p>This page is licensed under CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/).</p>
+
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+<footer class="footer">
+  <div class="nav-footer">
+    <div class="nav-footer-left">
+      &nbsp;
+    </div>   
+    <div class="nav-footer-center">
+<p>Content licensed under <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a></p>
+</div>
+    <div class="nav-footer-right">
+      &nbsp;
+    </div>
+  </div>
+</footer>
+
+
+
+
+</body></html>

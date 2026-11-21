@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.20">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="dcterms.date" content="2026-11-07">
+<meta name="description" content="Where attention’s quadratic cost comes from, what the KV cache is and how big it gets, how GQA and MLA shrink it, and a map of the long-context fixes (FlashAttention, sliding windows, sparse and linear attention, cache eviction).">
+
+<title>The Cost of Attention: n², the KV Cache, GQA and MLA – Agentic AI Notes</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../../">
+<script src="../../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../../site_libs/quarto-html/popper.min.js"></script>
+<script src="../../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../../site_libs/quarto-html/quarto-syntax-highlighting-17888a1159294d3eb470f19f6f52f5a5.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../../site_libs/bootstrap/bootstrap-17e92714493fce31463ccfbbc8488715.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+<script src="../../site_libs/quarto-diagram/mermaid.min.js"></script>
+<script src="../../site_libs/quarto-diagram/mermaid-init.js"></script>
+<link href="../../site_libs/quarto-diagram/mermaid.css" rel="stylesheet">
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../../styles.css">
+</head>
+
+<body class="nav-fixed quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a class="navbar-brand" href="../../index.html">
+    <span class="navbar-title">Agentic AI Notes</span>
+    </a>
+  </div>
+            <div id="quarto-search" class="" title="Search"></div>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+  <span class="navbar-toggler-icon"></span>
+</button>
+          <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav navbar-nav-scroll me-auto">
+  <li class="nav-item">
+    <a class="nav-link" href="../../index.html"> 
+<span class="menu-text">Home</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../blog.html"> 
+<span class="menu-text">Articles</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../about.html"> 
+<span class="menu-text">About</span></a>
+  </li>  
+</ul>
+          </div> <!-- /navcollapse -->
+            <div class="quarto-navbar-tools">
+</div>
+      </div> <!-- /container-fluid -->
+    </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">On this page</h2>
+   
+  <ul>
+  <li><a href="#problem-1-the-n2-score-matrix" id="toc-problem-1-the-n2-score-matrix" class="nav-link active" data-scroll-target="#problem-1-the-n2-score-matrix">Problem 1: the <span class="math inline">\(n^2\)</span> score matrix</a></li>
+  <li><a href="#two-phases-of-llm-inference" id="toc-two-phases-of-llm-inference" class="nav-link" data-scroll-target="#two-phases-of-llm-inference">Two phases of LLM inference</a></li>
+  <li><a href="#problem-2-the-kv-cache" id="toc-problem-2-the-kv-cache" class="nav-link" data-scroll-target="#problem-2-the-kv-cache">Problem 2: the KV cache</a>
+  <ul class="collapse">
+  <li><a href="#how-big-is-the-cache" id="toc-how-big-is-the-cache" class="nav-link" data-scroll-target="#how-big-is-the-cache">How big is the cache?</a></li>
+  </ul></li>
+  <li><a href="#shrinking-the-cache-by-sharing-heads-mqa-and-gqa" id="toc-shrinking-the-cache-by-sharing-heads-mqa-and-gqa" class="nav-link" data-scroll-target="#shrinking-the-cache-by-sharing-heads-mqa-and-gqa">Shrinking the cache by sharing heads: MQA and GQA</a></li>
+  <li><a href="#shrinking-the-cache-by-compression-mla" id="toc-shrinking-the-cache-by-compression-mla" class="nav-link" data-scroll-target="#shrinking-the-cache-by-compression-mla">Shrinking the cache by compression: MLA</a></li>
+  <li><a href="#taming-the-n2-cost-a-map-of-the-main-ideas" id="toc-taming-the-n2-cost-a-map-of-the-main-ideas" class="nav-link" data-scroll-target="#taming-the-n2-cost-a-map-of-the-main-ideas">Taming the <span class="math inline">\(n^2\)</span> cost: a map of the main ideas</a></li>
+  <li><a href="#common-pitfalls" id="toc-common-pitfalls" class="nav-link" data-scroll-target="#common-pitfalls">Common pitfalls</a></li>
+  <li><a href="#summary" id="toc-summary" class="nav-link" data-scroll-target="#summary">Summary</a></li>
+  <li><a href="#references" id="toc-references" class="nav-link" data-scroll-target="#references">References</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">The Cost of Attention: n², the KV Cache, GQA and MLA</h1>
+<p class="subtitle lead">Why long contexts are expensive, and the main ideas for making them cheaper</p>
+  <div class="quarto-categories">
+    <div class="quarto-category">LLM fundamentals</div>
+    <div class="quarto-category">Transformers</div>
+    <div class="quarto-category">Attention</div>
+    <div class="quarto-category">Inference</div>
+  </div>
+  </div>
+
+<div>
+  <div class="description">
+    Where attention’s quadratic cost comes from, what the KV cache is and how big it gets, how GQA and MLA shrink it, and a map of the long-context fixes (FlashAttention, sliding windows, sparse and linear attention, cache eviction).
+  </div>
+</div>
+
+
+<div class="quarto-title-meta">
+
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">November 7, 2026</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>This is the fourth and last article of this attention set. We know how <a href="../../posts/attention-scaled-dot-product/index.html">attention works</a>, how it is <a href="../../posts/attention-masks-encoder-decoder/index.html">masked</a>, and how <a href="../../posts/multi-head-attention/index.html">multiple heads</a> share the work. Now the bill: what does attention cost, and what do real systems do about it?</p>
+<p>There are two <em>different</em> problems hiding under “attention is expensive”, and mixing them up is the most common source of confusion:</p>
+<ol type="1">
+<li><strong>The <span class="math inline">\(n^2\)</span> score matrix</strong>: a <em>compute and temporary-memory</em> problem, mainly when processing many tokens at once.</li>
+<li><strong>The KV cache</strong>: a <em>persistent-memory</em> problem, growing with every generated token.</li>
+</ol>
+<section id="problem-1-the-n2-score-matrix" class="level2">
+<h2 class="anchored" data-anchor-id="problem-1-the-n2-score-matrix">Problem 1: the <span class="math inline">\(n^2\)</span> score matrix</h2>
+<p>For a sequence of <span class="math inline">\(n\)</span> tokens, the scores <span class="math inline">\(QK^\top\)</span> form an <span class="math inline">\(n \times n\)</span> matrix: every token against every token. Per layer, per head:</p>
+<ul>
+<li><strong>Time:</strong> <span class="math inline">\(O(n^2 \cdot d_k)\)</span> multiply-adds to compute the scores (and the same order again to apply them to <span class="math inline">\(V\)</span>).</li>
+<li><strong>Memory:</strong> <span class="math inline">\(O(n^2)\)</span> to hold the score matrix if you store it.</li>
+</ul>
+<p>Note that the <em>size</em> of the matrix depends only on <span class="math inline">\(n\)</span>, not on the model width. Here is how many entries it has, and how much memory that is for one head in one layer (binary units: 1 GiB = <span class="math inline">\(2^{30}\)</span> bytes):</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Sequence length</th>
+<th><span class="math inline">\(n^2\)</span> entries</th>
+<th>FP32 (4 bytes each)</th>
+<th>FP16 (2 bytes each)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>2K (2,048)</td>
+<td>4.2 million</td>
+<td>16 MiB</td>
+<td>8 MiB</td>
+</tr>
+<tr class="even">
+<td>8K (8,192)</td>
+<td>67 million</td>
+<td>256 MiB</td>
+<td>128 MiB</td>
+</tr>
+<tr class="odd">
+<td>32K (32,768)</td>
+<td>1.07 billion</td>
+<td>4 GiB</td>
+<td>2 GiB</td>
+</tr>
+<tr class="even">
+<td>128K (131,072)</td>
+<td>17.2 billion</td>
+<td>64 GiB</td>
+<td>32 GiB</td>
+</tr>
+<tr class="odd">
+<td>1M (1,048,576)</td>
+<td>1.1 trillion</td>
+<td>4 TiB</td>
+<td>2 TiB</td>
+</tr>
+</tbody>
+</table>
+<p>Doubling the context quadruples the cost. And these numbers are <em>per head</em>; a model has many heads (and the same again in every layer), though layers run one after another, so only one layer’s matrices need to exist at a time. A naive implementation that stores the full matrix simply cannot reach long contexts.</p>
+</section>
+<section id="two-phases-of-llm-inference" class="level2">
+<h2 class="anchored" data-anchor-id="two-phases-of-llm-inference">Two phases of LLM inference</h2>
+<p>When an LLM answers a prompt, it works in two phases:</p>
+<ul>
+<li><strong>Prefill:</strong> the whole prompt is processed in one parallel pass (with the causal mask). This is where the <span class="math inline">\(n^2\)</span> matrix appears.</li>
+<li><strong>Decode:</strong> tokens are then generated <em>one at a time</em>. Each new token needs attention over everything before it, but only one new query row, so there is no big square matrix. What dominates now is the cost of <em>remembering</em> the past. That is the KV cache.</li>
+</ul>
+</section>
+<section id="problem-2-the-kv-cache" class="level2">
+<h2 class="anchored" data-anchor-id="problem-2-the-kv-cache">Problem 2: the KV cache</h2>
+<p>To generate token <span class="math inline">\(t+1\)</span>, the model computes a query for the new position and compares it with the <strong>keys</strong> of tokens <span class="math inline">\(1, \dots, t\)</span>, then takes a weighted sum of their <strong>values</strong>. The key and value vectors of earlier tokens do not change as generation proceeds, because with a causal mask a token’s representation never depends on later tokens. So we compute them once and <strong>store</strong> them. That stored collection is the <strong>KV cache</strong>.</p>
+<p>Precisely, for every layer, every key/value head, and every token so far, the cache holds one key vector and one value vector (each of size <span class="math inline">\(d_\text{head}\)</span>). What is <em>not</em> cached is the query: each query is used exactly once, for its own step, and then discarded.</p>
+<div class="cell" data-layout-align="default">
+<div class="cell-output-display">
+<div>
+<p></p><figure class="figure"><p></p>
+<div>
+<pre class="mermaid mermaid-js">flowchart LR
+  T["&lt;b&gt;New token x_t&lt;/b&gt;"] --&gt; P["&lt;b&gt;Project&lt;/b&gt;&lt;br/&gt;q_t, k_t, v_t"]
+  P --&gt;|"append k_t, v_t"| C[("&lt;b&gt;KV cache&lt;/b&gt;&lt;br/&gt;k_1…k_t, v_1…v_t&lt;br/&gt;per layer, per KV head")]
+  P --&gt;|"q_t (used once)"| A["&lt;b&gt;Attention&lt;/b&gt;&lt;br/&gt;softmax(q_t·Kᵀ/√d_k)·V"]
+  C --&gt;|"all cached K, V"| A
+  A --&gt; N["&lt;b&gt;Next-token&lt;br/&gt;prediction&lt;/b&gt;"]
+</pre>
+</div>
+<p></p></figure><p></p>
+</div>
+</div>
+</div>
+<p>Here is a minimal version for one head and one layer. The loop that reuses the cache produces exactly the same outputs as one full pass with a causal mask (we verified this numerically):</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> softmax(z, axis<span class="op">=-</span><span class="dv">1</span>):</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    z <span class="op">=</span> z <span class="op">-</span> z.<span class="bu">max</span>(axis<span class="op">=</span>axis, keepdims<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    e <span class="op">=</span> np.exp(z)</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> e <span class="op">/</span> e.<span class="bu">sum</span>(axis<span class="op">=</span>axis, keepdims<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>rng <span class="op">=</span> np.random.default_rng(<span class="dv">0</span>)</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>n, d, d_k <span class="op">=</span> <span class="dv">6</span>, <span class="dv">16</span>, <span class="dv">8</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>X <span class="op">=</span> rng.standard_normal((n, d))</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>W_Q, W_K, W_V <span class="op">=</span> (rng.standard_normal((d, d_k)) <span class="op">/</span> np.sqrt(d) <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">3</span>))</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="co"># (a) one full pass with a causal mask</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>Q, K, V <span class="op">=</span> X <span class="op">@</span> W_Q, X <span class="op">@</span> W_K, X <span class="op">@</span> W_V</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>M <span class="op">=</span> np.triu(np.full((n, n), <span class="op">-</span>np.inf), k<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>full <span class="op">=</span> softmax(Q <span class="op">@</span> K.T <span class="op">/</span> np.sqrt(d_k) <span class="op">+</span> M) <span class="op">@</span> V</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="co"># (b) token by token, with a KV cache</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>k_cache, v_cache, outs <span class="op">=</span> [], [], []</span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> t <span class="kw">in</span> <span class="bu">range</span>(n):</span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    x_t <span class="op">=</span> X[t]</span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    q_t <span class="op">=</span> x_t <span class="op">@</span> W_Q                        <span class="co"># the query is used once and thrown away</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    k_cache.append(x_t <span class="op">@</span> W_K)              <span class="co"># keys and values are appended and reused</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    v_cache.append(x_t <span class="op">@</span> W_V)</span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    K_t, V_t <span class="op">=</span> np.stack(k_cache), np.stack(v_cache)    <span class="co"># (t+1, d_k)</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>    w <span class="op">=</span> softmax(q_t <span class="op">@</span> K_t.T <span class="op">/</span> np.sqrt(d_k))            <span class="co"># (t+1,)</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    outs.append(w <span class="op">@</span> V_t)</span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(np.allclose(full, np.stack(outs)))   <span class="co"># True</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<section id="how-big-is-the-cache" class="level3">
+<h3 class="anchored" data-anchor-id="how-big-is-the-cache">How big is the cache?</h3>
+<p>Per token, the cache stores <span class="math inline">\(2\)</span> (key and value) <span class="math inline">\(\times\)</span> <span class="math inline">\(L\)</span> layers <span class="math inline">\(\times\)</span> <span class="math inline">\(n_\text{kv}\)</span> KV heads <span class="math inline">\(\times\)</span> <span class="math inline">\(d_\text{head}\)</span> numbers:</p>
+<p><span class="math display">\[
+\text{cache bytes} = 2 \cdot L \cdot n_\text{kv} \cdot d_\text{head} \cdot \text{bytes per number} \cdot (\text{tokens}) \cdot (\text{batch size})
+\]</span></p>
+<p>Take a 7B to 8B-class configuration (as in Mistral 7B and Llama-3-8B): <span class="math inline">\(L = 32\)</span> layers, 32 query heads, <span class="math inline">\(d_\text{head} = 128\)</span>, FP16 (2 bytes). With standard multi-head attention (32 KV heads) that is 512 KiB per token. With 8 KV heads, 128 KiB per token:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Context length</th>
+<th>32 KV heads (standard MHA)</th>
+<th>8 KV heads (GQA)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>8K tokens</td>
+<td>4 GiB</td>
+<td>1 GiB</td>
+</tr>
+<tr class="even">
+<td>128K tokens</td>
+<td>64 GiB</td>
+<td>16 GiB</td>
+</tr>
+</tbody>
+</table>
+<p>And that is for <em>one</em> sequence. Serving <span class="math inline">\(B\)</span> requests at once multiplies it by <span class="math inline">\(B\)</span>. The cache grows linearly with context, but at long contexts and large batches it can rival the model weights in memory use. Since decoding is typically limited by how fast memory can be read, not by arithmetic, a smaller cache also means faster generation.</p>
+</section>
+</section>
+<section id="shrinking-the-cache-by-sharing-heads-mqa-and-gqa" class="level2">
+<h2 class="anchored" data-anchor-id="shrinking-the-cache-by-sharing-heads-mqa-and-gqa">Shrinking the cache by sharing heads: MQA and GQA</h2>
+<p>The cache size is proportional to the number of <strong>KV heads</strong>. Standard multi-head attention gives every query head its own key and value head. Two ideas share them:</p>
+<ul>
+<li><strong>Multi-query attention (MQA)</strong> (Shazeer, 2019): <em>all</em> query heads share a single KV head.</li>
+<li><strong>Grouped-query attention (GQA)</strong> (Ainslie et al., 2023): an in-between setting. With <span class="math inline">\(h\)</span> query heads and <span class="math inline">\(g\)</span> KV heads (<span class="math inline">\(1 &lt; g &lt; h\)</span>), each KV head is shared by a <em>group</em> of <span class="math inline">\(h/g\)</span> query heads.</li>
+</ul>
+<div class="cell" data-layout-align="default">
+<div class="cell-output-display">
+<div>
+<p></p><figure class="figure"><p></p>
+<div>
+<pre class="mermaid mermaid-js">flowchart LR
+  subgraph QH["Query heads (h = 4)"]
+    Q1["Q head 1"]
+    Q2["Q head 2"]
+    Q3["Q head 3"]
+    Q4["Q head 4"]
+  end
+  subgraph KVH["KV heads (g = 2)"]
+    KV1["KV head 1&lt;br/&gt;(K₁, V₁)"]
+    KV2["KV head 2&lt;br/&gt;(K₂, V₂)"]
+  end
+  Q1 --&gt; KV1
+  Q2 --&gt; KV1
+  Q3 --&gt; KV2
+  Q4 --&gt; KV2
+</pre>
+</div>
+<p></p></figure><p></p>
+</div>
+</div>
+</div>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Variant</th>
+<th>KV heads</th>
+<th>Cache vs.&nbsp;standard MHA</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>MHA</td>
+<td><span class="math inline">\(h\)</span></td>
+<td><span class="math inline">\(1\times\)</span></td>
+</tr>
+<tr class="even">
+<td>GQA</td>
+<td><span class="math inline">\(g\)</span></td>
+<td><span class="math inline">\(g/h\)</span></td>
+</tr>
+<tr class="odd">
+<td>MQA</td>
+<td>1</td>
+<td><span class="math inline">\(1/h\)</span></td>
+</tr>
+</tbody>
+</table>
+<p>With 32 query heads and 8 KV heads, each KV head serves 4 query heads and the cache is 4 times smaller (the table above). The number of <em>query</em> heads is unchanged, so the score computation is the same; the savings are in cache memory and in the data read per decoding step.</p>
+<p>In code, GQA is just sharing: compute fewer K and V heads, then repeat each across its group before attending:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>h, g <span class="op">=</span> <span class="dv">8</span>, <span class="dv">2</span>                                      <span class="co"># 8 query heads, 2 KV heads</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>Qh <span class="op">=</span> ...                                         <span class="co"># (h, n, d_k)</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>Kg, Vg <span class="op">=</span> ...                                     <span class="co"># (g, n, d_k): only g sets are computed and cached</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>Kh <span class="op">=</span> np.repeat(Kg, h <span class="op">//</span> g, axis<span class="op">=</span><span class="dv">0</span>)               <span class="co"># (h, n, d_k): heads 0-3 share KV head 0, heads 4-7 share KV head 1</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>Vh <span class="op">=</span> np.repeat(Vg, h <span class="op">//</span> g, axis<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>out <span class="op">=</span> softmax(Qh <span class="op">@</span> Kh.transpose(<span class="dv">0</span>, <span class="dv">2</span>, <span class="dv">1</span>) <span class="op">/</span> np.sqrt(d_k) <span class="op">+</span> M) <span class="op">@</span> Vh</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>The GQA paper reports that GQA reaches quality close to standard multi-head attention with speed comparable to MQA, and proposes converting an existing multi-head checkpoint by mean-pooling its key and value heads and then training briefly (about 5% of the original pre-training compute). Its experiments used T5 encoder-decoder models, so the exact numbers should not be assumed to transfer unchanged to every decoder-only LLM.</p>
+</section>
+<section id="shrinking-the-cache-by-compression-mla" class="level2">
+<h2 class="anchored" data-anchor-id="shrinking-the-cache-by-compression-mla">Shrinking the cache by compression: MLA</h2>
+<p>GQA reduces the cache by having <em>fewer</em> KV heads. <strong>Multi-head Latent Attention (MLA)</strong>, introduced with DeepSeek-V2 (DeepSeek-AI, 2024), keeps the full number of heads but compresses what is stored. For each token, the keys and values are jointly compressed into one small <strong>latent vector</strong> <span class="math inline">\(c_t\)</span>:</p>
+<p><span class="math display">\[
+c_t = W^{DKV} h_t, \qquad K_t = W^{UK} c_t, \qquad V_t = W^{UV} c_t
+\]</span></p>
+<p>Here <span class="math inline">\(h_t\)</span> is the token’s hidden vector, <span class="math inline">\(W^{DKV}\)</span> is a learned <em>down</em>-projection to a small size <span class="math inline">\(d_c\)</span>, and <span class="math inline">\(W^{UK}\)</span>, <span class="math inline">\(W^{UV}\)</span> are learned <em>up</em>-projections that expand the latent back into per-head keys and values. Only <span class="math inline">\(c_t\)</span> is cached, not <span class="math inline">\(K_t\)</span> and <span class="math inline">\(V_t\)</span>.</p>
+<ul>
+<li><strong>What is actually cached.</strong> The paper adds a small extra “decoupled” key that carries positional information (rotary position embeddings, covered in the positional-encoding article), so the per-token cache is the latent plus that small key, not the latent alone.</li>
+<li><strong>Scale.</strong> DeepSeek-V2 uses 128 heads of size 128 and a latent size <span class="math inline">\(d_c = 512\)</span>. Standard attention would cache <span class="math inline">\(2 \times 128 \times 128 = 32{,}768\)</span> numbers per token per layer for keys and values; the latent is 512 (plus the small positional key). The paper reports a 93.3% smaller KV cache and 5.76 times higher maximum generation throughput compared with their earlier DeepSeek 67B model; that comparison is between two different models, so it is not a pure measurement of MLA against standard attention.</li>
+<li><strong>Quality.</strong> The authors report that MLA matches or beats standard multi-head attention in their experiments, whereas MQA and GQA trade away some quality for their savings.</li>
+<li><strong>No free lunch.</strong> Reconstructing keys and values costs extra computation. The paper notes that at inference the up-projection matrices can be folded into the query and output projections, so full keys and values need not be explicitly built.</li>
+</ul>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Variant</th>
+<th>Cached per token, per layer</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>MHA</td>
+<td><span class="math inline">\(2 \cdot h \cdot d_\text{head}\)</span></td>
+</tr>
+<tr class="even">
+<td>GQA</td>
+<td><span class="math inline">\(2 \cdot g \cdot d_\text{head}\)</span></td>
+</tr>
+<tr class="odd">
+<td>MQA</td>
+<td><span class="math inline">\(2 \cdot d_\text{head}\)</span></td>
+</tr>
+<tr class="even">
+<td>MLA</td>
+<td><span class="math inline">\(d_c\)</span> + a small positional key</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="taming-the-n2-cost-a-map-of-the-main-ideas" class="level2">
+<h2 class="anchored" data-anchor-id="taming-the-n2-cost-a-map-of-the-main-ideas">Taming the <span class="math inline">\(n^2\)</span> cost: a map of the main ideas</h2>
+<p>These address problem 1 (and sometimes problem 2). Each deserves its own deep dive; the goal here is intuition.</p>
+<p><strong>1. FlashAttention: compute the same thing, move less data.</strong> FlashAttention (Dao et al., 2022) is an <em>exact</em> algorithm, not an approximation. GPUs have a large but slow main memory (HBM) and a tiny but very fast on-chip memory (SRAM). Standard attention writes the whole <span class="math inline">\(n \times n\)</span> matrix to HBM and reads it back several times. FlashAttention processes the matrices in tiles that fit in SRAM, updating the softmax incrementally, so the full matrix is never written to HBM. The paper reports memory that is linear in sequence length and large wall-clock speedups. The number of arithmetic operations is <em>not</em> reduced (the backward pass even recomputes some values); the win is fewer memory reads and writes, which is what limits attention in practice.</p>
+<p><strong>2. Sliding-window (local) attention: look only nearby.</strong> Each token attends to only the previous <span class="math inline">\(w\)</span> tokens, so cost is <span class="math inline">\(O(n \cdot w)\)</span>, linear in <span class="math inline">\(n\)</span>. Longformer (Beltagy et al., 2020) and Mistral 7B (Jiang et al., 2023, window 4,096) use this. Information can still travel further, because each layer lets a token see <span class="math inline">\(w\)</span> positions back from tokens that themselves already saw <span class="math inline">\(w\)</span> positions back; in principle after <span class="math inline">\(L\)</span> layers the reach is about <span class="math inline">\(L \cdot w\)</span>, but that indirect path is weaker than direct attention.</p>
+<p><strong>3. Sparse patterns: local plus a few long-range links.</strong> Combine a local window with a few <em>global</em> tokens that attend to (and are attended by) everything. BigBird (Zaheer et al., 2020) adds random links and reports cost linear in sequence length. The earlier Sparse Transformer (Child et al., 2019) reduced the cost to <span class="math inline">\(O(n\sqrt{n})\)</span>.</p>
+<p><strong>4. Linear attention and state-space models: change the math.</strong> Without the softmax, <span class="math inline">\((\phi(Q)\phi(K)^\top)V\)</span> can be regrouped by associativity as <span class="math inline">\(\phi(Q)\,(\phi(K)^\top V)\)</span>. The small matrix <span class="math inline">\(\phi(K)^\top V\)</span> is computed once, giving cost linear in <span class="math inline">\(n\)</span>. Models such as Mamba (Gu &amp; Dao, 2023) and RWKV (Peng et al., 2023) follow this recurrent-style direction. These are different architectures rather than drop-in replacements, and results vary on tasks that need precise recall of specific earlier tokens, so they are usually evaluated carefully against full attention.</p>
+<p><strong>5. KV-cache compression and eviction: remember less.</strong> Keep the cache bounded by dropping or shrinking entries. H2O (Zhang et al., 2023) keeps the tokens that have received the most attention plus recent ones. StreamingLLM (Xiao et al., 2023) keeps the first few “attention sink” tokens plus a recent window. Quantized caches store keys and values in lower precision.</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Idea</th>
+<th>What it changes</th>
+<th>Compute as <span class="math inline">\(n\)</span> grows</th>
+<th>Trade-off</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>FlashAttention</td>
+<td>how attention is computed</td>
+<td>still <span class="math inline">\(O(n^2)\)</span>, but far less memory traffic</td>
+<td>none in the math; needs a specialized kernel</td>
+</tr>
+<tr class="even">
+<td>Sliding window</td>
+<td>which scores exist</td>
+<td><span class="math inline">\(O(n \cdot w)\)</span></td>
+<td>no direct access beyond the window</td>
+</tr>
+<tr class="odd">
+<td>Sparse patterns</td>
+<td>which scores exist</td>
+<td>about linear (BigBird)</td>
+<td>a fixed pattern may miss needed links</td>
+</tr>
+<tr class="even">
+<td>Linear attention / SSMs</td>
+<td>the attention math itself</td>
+<td>linear</td>
+<td>a different model family; recall trade-offs</td>
+</tr>
+<tr class="odd">
+<td>Cache eviction / quantization</td>
+<td>what is stored</td>
+<td>bounded cache</td>
+<td>may discard information that is needed later</td>
+</tr>
+<tr class="even">
+<td>GQA / MLA</td>
+<td>how many K, V are stored</td>
+<td>scores unchanged</td>
+<td>small quality trade-offs (GQA) or extra compute (MLA)</td>
+</tr>
+</tbody>
+</table>
+<p>A useful way to keep these straight: <em>masks and sparsity decide which scores exist; FlashAttention decides how the existing scores are computed; GQA, MLA and eviction decide what is remembered between steps.</em> FlashAttention composes with masks such as sliding windows rather than competing with them.</p>
+</section>
+<section id="common-pitfalls" class="level2">
+<h2 class="anchored" data-anchor-id="common-pitfalls">Common pitfalls</h2>
+<ul>
+<li><strong>Saying FlashAttention “reduces the complexity”.</strong> It is exact attention with the same <span class="math inline">\(O(n^2)\)</span> arithmetic; it reduces memory traffic and avoids storing the <span class="math inline">\(n \times n\)</span> matrix.</li>
+<li><strong>Quoting the score-matrix size without “per head, per layer”</strong>, or tying it to the model width. It depends only on <span class="math inline">\(n\)</span> (and the number of bytes per entry).</li>
+<li><strong>Confusing the two problems.</strong> The <span class="math inline">\(n^2\)</span> matrix is transient and mainly a prefill problem. The KV cache is persistent and grows with every generated token and every concurrent request.</li>
+<li><strong>Caching queries, or thinking the cache stores text.</strong> The cache holds keys and values (per layer, per KV head), not queries and not tokens.</li>
+<li><strong>Forgetting layers and batch size</strong> in cache estimates. Memory scales with <span class="math inline">\(L \times n_\text{kv} \times d_\text{head} \times \text{tokens} \times \text{batch}\)</span>.</li>
+<li><strong>Reading GQA as “fewer attention heads”.</strong> The number of query heads stays the same; only the number of distinct key/value heads shrinks.</li>
+<li><strong>Treating MLA as GQA with a different name.</strong> MLA keeps all heads and stores a compressed latent from which keys and values are rebuilt.</li>
+<li><strong>Mixing units.</strong> GB (powers of 10) and GiB (powers of 2) differ by about 7%, which matters at the 64 GiB scale.</li>
+</ul>
+</section>
+<section id="summary" class="level2">
+<h2 class="anchored" data-anchor-id="summary">Summary</h2>
+<ul>
+<li>Attention’s score matrix is <span class="math inline">\(n \times n\)</span> per head per layer, so time and naive memory grow quadratically with context.</li>
+<li>The KV cache stores each layer’s keys and values for all past tokens, so decoding does not recompute them. Its size grows linearly with context, layers, KV heads and batch.</li>
+<li>GQA shrinks the cache by sharing KV heads across groups of query heads; MLA shrinks it by caching a low-rank latent per token.</li>
+<li>FlashAttention makes exact attention fast and memory-light; sliding windows, sparse patterns, linear attention and cache eviction trade some generality for lower cost.</li>
+</ul>
+</section>
+<section id="references" class="level2">
+<h2 class="anchored" data-anchor-id="references">References</h2>
+<ul>
+<li>Vaswani, A., et al.&nbsp;(2017). <em>Attention Is All You Need.</em> <a href="https://arxiv.org/abs/1706.03762">arXiv:1706.03762</a>.</li>
+<li>Shazeer, N. (2019). <em>Fast Transformer Decoding: One Write-Head is All You Need.</em> <a href="https://arxiv.org/abs/1911.02150">arXiv:1911.02150</a>.</li>
+<li>Ainslie, J., Lee-Thorp, J., de Jong, M., Zemlyanskiy, Y., Lebrón, F., Sanghai, S. (2023). <em>GQA: Training Generalized Multi-Query Transformer Models from Multi-Head Checkpoints.</em> EMNLP 2023. <a href="https://arxiv.org/abs/2305.13245">arXiv:2305.13245</a>.</li>
+<li>DeepSeek-AI (2024). <em>DeepSeek-V2: A Strong, Economical, and Efficient Mixture-of-Experts Language Model.</em> <a href="https://arxiv.org/abs/2405.04434">arXiv:2405.04434</a>.</li>
+<li>Dao, T., Fu, D. Y., Ermon, S., Rudra, A., Ré, C. (2022). <em>FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness.</em> NeurIPS 2022. <a href="https://arxiv.org/abs/2205.14135">arXiv:2205.14135</a>.</li>
+<li>Beltagy, I., Peters, M. E., Cohan, A. (2020). <em>Longformer: The Long-Document Transformer.</em> <a href="https://arxiv.org/abs/2004.05150">arXiv:2004.05150</a>.</li>
+<li>Jiang, A. Q., et al.&nbsp;(2023). <em>Mistral 7B.</em> <a href="https://arxiv.org/abs/2310.06825">arXiv:2310.06825</a>.</li>
+<li>Child, R., Gray, S., Radford, A., Sutskever, I. (2019). <em>Generating Long Sequences with Sparse Transformers.</em> <a href="https://arxiv.org/abs/1904.10509">arXiv:1904.10509</a>.</li>
+<li>Zaheer, M., et al.&nbsp;(2020). <em>Big Bird: Transformers for Longer Sequences.</em> NeurIPS 2020. <a href="https://arxiv.org/abs/2007.14062">arXiv:2007.14062</a>.</li>
+<li>Gu, A., Dao, T. (2023). <em>Mamba: Linear-Time Sequence Modeling with Selective State Spaces.</em> <a href="https://arxiv.org/abs/2312.00752">arXiv:2312.00752</a>.</li>
+<li>Peng, B., et al.&nbsp;(2023). <em>RWKV: Reinventing RNNs for the Transformer Era.</em> <a href="https://arxiv.org/abs/2305.13048">arXiv:2305.13048</a>.</li>
+<li>Zhang, Z., et al.&nbsp;(2023). <em>H2O: Heavy-Hitter Oracle for Efficient Generative Inference of Large Language Models.</em> <a href="https://arxiv.org/abs/2306.14048">arXiv:2306.14048</a>.</li>
+<li>Xiao, G., et al.&nbsp;(2023). <em>Efficient Streaming Language Models with Attention Sinks.</em> <a href="https://arxiv.org/abs/2309.17453">arXiv:2309.17453</a>.</li>
+<li>Roitman, H. <em>The Hitchhiker’s Guide to Agentic AI: From Foundations to Systems.</em> <a href="https://arxiv.org/abs/2606.24937">arXiv:2606.24937</a>.</li>
+</ul>
+<hr>
+<p>This work adapts material from “The Hitchhiker’s Guide to Agentic AI” by Haggai Roitman (arXiv:2606.24937v3, book version 1.4), licensed under CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/). Changes: adapted into standalone articles, with added explanations, diagrams and examples. This work is licensed under CC BY-SA 4.0.</p>
+
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+<footer class="footer">
+  <div class="nav-footer">
+    <div class="nav-footer-left">
+      &nbsp;
+    </div>   
+    <div class="nav-footer-center">
+<p>Content licensed under <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a></p>
+</div>
+    <div class="nav-footer-right">
+      &nbsp;
+    </div>
+  </div>
+</footer>
+
+
+
+
+</body></html>

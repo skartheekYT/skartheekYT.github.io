@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.20">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="dcterms.date" content="2026-11-07">
+<meta name="description" content="The causal mask, teacher forcing and the right shift, cross-attention, and how the original encoder-decoder Transformer became the decoder-only architecture behind modern LLMs.">
+
+<title>Masks, Cross-Attention and the Original Transformer – Agentic AI Notes</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../../">
+<script src="../../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../../site_libs/quarto-html/popper.min.js"></script>
+<script src="../../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../../site_libs/quarto-html/quarto-syntax-highlighting-17888a1159294d3eb470f19f6f52f5a5.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../../site_libs/bootstrap/bootstrap-17e92714493fce31463ccfbbc8488715.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+<script src="../../site_libs/quarto-diagram/mermaid.min.js"></script>
+<script src="../../site_libs/quarto-diagram/mermaid-init.js"></script>
+<link href="../../site_libs/quarto-diagram/mermaid.css" rel="stylesheet">
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../../styles.css">
+</head>
+
+<body class="nav-fixed quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a class="navbar-brand" href="../../index.html">
+    <span class="navbar-title">Agentic AI Notes</span>
+    </a>
+  </div>
+            <div id="quarto-search" class="" title="Search"></div>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+  <span class="navbar-toggler-icon"></span>
+</button>
+          <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav navbar-nav-scroll me-auto">
+  <li class="nav-item">
+    <a class="nav-link" href="../../index.html"> 
+<span class="menu-text">Home</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../blog.html"> 
+<span class="menu-text">Articles</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../about.html"> 
+<span class="menu-text">About</span></a>
+  </li>  
+</ul>
+          </div> <!-- /navcollapse -->
+            <div class="quarto-navbar-tools">
+</div>
+      </div> <!-- /container-fluid -->
+    </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">On this page</h2>
+   
+  <ul>
+  <li><a href="#the-original-job-translation" id="toc-the-original-job-translation" class="nav-link active" data-scroll-target="#the-original-job-translation">The original job: translation</a></li>
+  <li><a href="#the-encoder-every-token-sees-every-token" id="toc-the-encoder-every-token-sees-every-token" class="nav-link" data-scroll-target="#the-encoder-every-token-sees-every-token">The encoder: every token sees every token</a></li>
+  <li><a href="#the-decoder-part-1-the-causal-mask" id="toc-the-decoder-part-1-the-causal-mask" class="nav-link" data-scroll-target="#the-decoder-part-1-the-causal-mask">The decoder, part 1: the causal mask</a></li>
+  <li><a href="#the-decoder-part-2-teacher-forcing-and-the-right-shift" id="toc-the-decoder-part-2-teacher-forcing-and-the-right-shift" class="nav-link" data-scroll-target="#the-decoder-part-2-teacher-forcing-and-the-right-shift">The decoder, part 2: teacher forcing and the right shift</a></li>
+  <li><a href="#the-decoder-part-3-cross-attention" id="toc-the-decoder-part-3-cross-attention" class="nav-link" data-scroll-target="#the-decoder-part-3-cross-attention">The decoder, part 3: cross-attention</a></li>
+  <li><a href="#from-encoder-decoder-to-decoder-only" id="toc-from-encoder-decoder-to-decoder-only" class="nav-link" data-scroll-target="#from-encoder-decoder-to-decoder-only">From encoder-decoder to decoder-only</a></li>
+  <li><a href="#common-pitfalls" id="toc-common-pitfalls" class="nav-link" data-scroll-target="#common-pitfalls">Common pitfalls</a></li>
+  <li><a href="#summary" id="toc-summary" class="nav-link" data-scroll-target="#summary">Summary</a></li>
+  <li><a href="#references" id="toc-references" class="nav-link" data-scroll-target="#references">References</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Masks, Cross-Attention and the Original Transformer</h1>
+<p class="subtitle lead">How the encoder-decoder design works, and what decoder-only LLMs kept</p>
+  <div class="quarto-categories">
+    <div class="quarto-category">LLM fundamentals</div>
+    <div class="quarto-category">Transformers</div>
+    <div class="quarto-category">Attention</div>
+  </div>
+  </div>
+
+<div>
+  <div class="description">
+    The causal mask, teacher forcing and the right shift, cross-attention, and how the original encoder-decoder Transformer became the decoder-only architecture behind modern LLMs.
+  </div>
+</div>
+
+
+<div class="quarto-title-meta">
+
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">November 7, 2026</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>This is the second article on attention. The <a href="../../posts/attention-scaled-dot-product/index.html">first one</a> built scaled dot-product attention:</p>
+<p><span class="math display">\[
+\text{Attention}(Q, K, V) = \text{softmax}\!\left(\frac{QK^\top}{\sqrt{d_k}}\right)V
+\]</span></p>
+<p>Here we use it in three ways, following the original Transformer paper (Vaswani et al., 2017): bidirectional self-attention, <em>masked</em> self-attention, and <em>cross-attention</em>. Then we see which parts modern LLMs kept.</p>
+<section id="the-original-job-translation" class="level2">
+<h2 class="anchored" data-anchor-id="the-original-job-translation">The original job: translation</h2>
+<p>The Transformer was introduced for sequence-to-sequence tasks such as machine translation. Two stacks of layers do two different jobs:</p>
+<ul>
+<li>The <strong>encoder</strong> reads the whole source sentence and produces one contextual vector per source token.</li>
+<li>The <strong>decoder</strong> writes the output sentence one token at a time, consulting the encoder’s output as it goes.</li>
+</ul>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="encoder-decoder.svg" class="img-fluid figure-img" alt="Encoder stack on the left, decoder stack on the right, with the encoder output feeding the decoder's cross-attention layer."></p>
+<figcaption>The original encoder-decoder Transformer (drawn for this article). Orange arrows show the encoder output used as keys and values in cross-attention.</figcaption>
+</figure>
+</div>
+<p>A few facts from the paper that the figure encodes (Vaswani et al., 2017):</p>
+<ul>
+<li>Both stacks have <span class="math inline">\(N = 6\)</span> identical layers, and every sub-layer and embedding outputs vectors of size <span class="math inline">\(d_\text{model} = 512\)</span>.</li>
+<li>Each sub-layer is wrapped as <span class="math inline">\(\text{LayerNorm}(x + \text{Sublayer}(x))\)</span>: add the sub-layer’s input back (a <em>residual connection</em>), then normalize.</li>
+<li>An encoder layer has two sub-layers: self-attention and a feed-forward network.</li>
+<li>A decoder layer has three: <em>masked</em> self-attention, cross-attention over the encoder output, and a feed-forward network.</li>
+<li>The input embeddings get <em>positional encodings</em> added, because attention alone has no sense of order. That is the topic of a later article.</li>
+</ul>
+</section>
+<section id="the-encoder-every-token-sees-every-token" class="level2">
+<h2 class="anchored" data-anchor-id="the-encoder-every-token-sees-every-token">The encoder: every token sees every token</h2>
+<p>In encoder self-attention, queries, keys and values all come from the previous layer’s output, and each position can attend to <em>all</em> positions. No mask is applied, so information flows in both directions. If you translate “the bank of the river”, the encoder’s vector for “bank” can use “river”, which comes later in the sentence.</p>
+</section>
+<section id="the-decoder-part-1-the-causal-mask" class="level2">
+<h2 class="anchored" data-anchor-id="the-decoder-part-1-the-causal-mask">The decoder, part 1: the causal mask</h2>
+<p>The decoder produces the output one token at a time, and token <span class="math inline">\(t\)</span> may depend only on tokens before it. If the decoder could peek at the answer while predicting it, training would be trivial and useless.</p>
+<p>The fix is a <strong>causal mask</strong> <span class="math inline">\(M\)</span> added to the scores before the softmax:</p>
+<p><span class="math display">\[
+\text{MaskedAttn}(Q,K,V) = \text{softmax}\!\left(\frac{QK^\top}{\sqrt{d_k}} + M\right)V,
+\qquad
+M_{ij} = \begin{cases} 0 &amp; \text{if } j \le i \quad(\text{allowed}) \\ -\infty &amp; \text{if } j &gt; i \quad(\text{future token}) \end{cases}
+\]</span></p>
+<p>Here <span class="math inline">\(i\)</span> is the query position (the row) and <span class="math inline">\(j\)</span> is the key position (the column). The paper describes this as setting to <span class="math inline">\(-\infty\)</span> the softmax inputs that correspond to illegal connections (Vaswani et al., 2017). A concrete 4-token example, with scores that are already scaled:</p>
+<p><span class="math display">\[
+S = \begin{pmatrix} 2&amp;1&amp;0&amp;1\\ 0&amp;2&amp;1&amp;0\\ 1&amp;0&amp;2&amp;1\\ 0&amp;1&amp;1&amp;2 \end{pmatrix}
+\qquad
+S + M = \begin{pmatrix} 2&amp;-\infty&amp;-\infty&amp;-\infty\\ 0&amp;2&amp;-\infty&amp;-\infty\\ 1&amp;0&amp;2&amp;-\infty\\ 0&amp;1&amp;1&amp;2 \end{pmatrix}
+\]</span></p>
+<p><span class="math display">\[
+\text{softmax}(S + M) \approx \begin{pmatrix} 1&amp;0&amp;0&amp;0\\ 0.119&amp;0.881&amp;0&amp;0\\ 0.245&amp;0.090&amp;0.665&amp;0\\ 0.072&amp;0.197&amp;0.197&amp;0.534 \end{pmatrix}
+\]</span></p>
+<p>Row <span class="math inline">\(i\)</span> is a proper probability distribution over positions <span class="math inline">\(1, \dots, i\)</span> only. The result is a <em>lower-triangular</em> attention matrix.</p>
+<p><strong>Why <span class="math inline">\(-\infty\)</span> and not 0?</strong> Adding 0 changes nothing: the score stays what it was, and the token still gets weight. In the example above, without the mask the first token would put <span class="math inline">\(0.197 + 0.072 + 0.197 = 47\%\)</span> of its attention on tokens 2, 3 and 4. Since softmax computes <span class="math inline">\(e^{s}\)</span>, a score of <span class="math inline">\(-\infty\)</span> gives <span class="math inline">\(e^{-\infty} = 0\)</span> exactly, and the remaining weights renormalize to sum to 1.</p>
+<div class="cell" data-layout-align="default">
+<div class="cell-output-display">
+<div>
+<p></p><figure class="figure"><p></p>
+<div>
+<pre class="mermaid mermaid-js">flowchart LR
+  A["&lt;b&gt;Scores&lt;/b&gt;&lt;br/&gt;S = QKᵀ/√d_k (n×n)"] --&gt; B["&lt;b&gt;Add mask&lt;/b&gt;&lt;br/&gt;S + M&lt;br/&gt;M = −∞ above the diagonal"]
+  B --&gt; C["&lt;b&gt;Softmax per row&lt;/b&gt;&lt;br/&gt;future weights become exactly 0"]
+  C --&gt; D["&lt;b&gt;Weighted sum&lt;/b&gt;&lt;br/&gt;O = A·V"]
+</pre>
+</div>
+<p></p></figure><p></p>
+</div>
+</div>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> softmax(z, axis<span class="op">=-</span><span class="dv">1</span>):</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    z <span class="op">=</span> z <span class="op">-</span> z.<span class="bu">max</span>(axis<span class="op">=</span>axis, keepdims<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    e <span class="op">=</span> np.exp(z)</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> e <span class="op">/</span> e.<span class="bu">sum</span>(axis<span class="op">=</span>axis, keepdims<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> causal_mask(n):</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="co"># 0 on and below the diagonal, -inf above it</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.triu(np.full((n, n), <span class="op">-</span>np.inf), k<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> masked_attention(Q, K, V):</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    n, d_k <span class="op">=</span> Q.shape</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    scores <span class="op">=</span> Q <span class="op">@</span> K.T <span class="op">/</span> np.sqrt(d_k) <span class="op">+</span> causal_mask(n)   <span class="co"># add the mask BEFORE softmax</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    weights <span class="op">=</span> softmax(scores)</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> weights <span class="op">@</span> V, weights</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
+<section id="the-decoder-part-2-teacher-forcing-and-the-right-shift" class="level2">
+<h2 class="anchored" data-anchor-id="the-decoder-part-2-teacher-forcing-and-the-right-shift">The decoder, part 2: teacher forcing and the right shift</h2>
+<p>During <strong>training</strong>, we already know the full target sentence. Instead of generating token by token, the decoder processes the <em>entire</em> target in one parallel pass, and the causal mask ensures every position still behaves as if it were generating step by step. Feeding the true previous tokens (rather than the model’s own predictions) is called <strong>teacher forcing</strong>. It is what makes training parallel and fast.</p>
+<p>There is a subtlety. The mask allows <span class="math inline">\(j \le i\)</span>, which <em>includes the diagonal</em>: position <span class="math inline">\(i\)</span> may look at itself. If the decoder input at position <span class="math inline">\(i\)</span> were the very token <span class="math inline">\(y_i\)</span> it is supposed to predict, it could simply copy it. The paper’s fix is to <strong>offset the output embeddings by one position</strong> (the “outputs, shifted right” at the bottom of the figure). Together, the mask and the shift guarantee that the prediction at position <span class="math inline">\(i\)</span> depends only on known outputs at positions less than <span class="math inline">\(i\)</span> (Vaswani et al., 2017).</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>tokens <span class="op">=</span> [<span class="st">"&lt;bos&gt;"</span>, <span class="st">"Los"</span>, <span class="st">"gatos"</span>, <span class="st">"duermen"</span>, <span class="st">"&lt;eos&gt;"</span>]</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>decoder_input  <span class="op">=</span> tokens[:<span class="op">-</span><span class="dv">1</span>]   <span class="co"># &lt;bos&gt; Los gatos duermen</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>decoder_target <span class="op">=</span> tokens[<span class="dv">1</span>:]    <span class="co"># Los gatos duermen &lt;eos&gt;</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Position <span class="math inline">\(t\)</span></th>
+<th>Decoder input</th>
+<th>Visible inputs (mask)</th>
+<th>Target to predict</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>1</td>
+<td><code>&lt;bos&gt;</code></td>
+<td><code>&lt;bos&gt;</code></td>
+<td>Los</td>
+</tr>
+<tr class="even">
+<td>2</td>
+<td>Los</td>
+<td><code>&lt;bos&gt;</code>, Los</td>
+<td>gatos</td>
+</tr>
+<tr class="odd">
+<td>3</td>
+<td>gatos</td>
+<td><code>&lt;bos&gt;</code>, Los, gatos</td>
+<td>duermen</td>
+</tr>
+<tr class="even">
+<td>4</td>
+<td>duermen</td>
+<td><code>&lt;bos&gt;</code>, Los, gatos, duermen</td>
+<td><code>&lt;eos&gt;</code></td>
+</tr>
+</tbody>
+</table>
+<p>Read the table row by row: the <strong>mask</strong> hides everything to the right, and the <strong>shift</strong> makes sure the token at position <span class="math inline">\(t\)</span> is the <em>previous</em> target, not the one being predicted.</p>
+<p>At <strong>inference</strong> there is no known target. The model generates one token, appends it to the input, and repeats, so the mask is implicit in the process. (During the first pass over a long prompt, all prompt tokens are processed in parallel, so the causal mask is still needed there.) One consequence of teacher forcing is that the model is trained on true prefixes but run on its own outputs; this train/test mismatch is often called <em>exposure bias</em>.</p>
+</section>
+<section id="the-decoder-part-3-cross-attention" class="level2">
+<h2 class="anchored" data-anchor-id="the-decoder-part-3-cross-attention">The decoder, part 3: cross-attention</h2>
+<p>After masked self-attention, each decoder layer has a second attention sub-layer that lets the decoder “read” the source sentence. In <strong>cross-attention</strong>:</p>
+<ul>
+<li>The <strong>queries</strong> come from the decoder (the previous sub-layer’s output).</li>
+<li>The <strong>keys and values</strong> come from the encoder’s final output <span class="math inline">\(H_\text{enc}\)</span>.</li>
+<li><strong>No causal mask</strong> is applied: every decoder position can attend to every source position.</li>
+</ul>
+<p><span class="math display">\[
+\text{CrossAttn}(Q_\text{dec}, K_\text{enc}, V_\text{enc}) = \text{softmax}\!\left(\frac{Q_\text{dec} K_\text{enc}^\top}{\sqrt{d_k}}\right)V_\text{enc}
+\]</span></p>
+<p>If the source has <span class="math inline">\(n\)</span> tokens and the target so far has <span class="math inline">\(m\)</span>, then <span class="math inline">\(Q_\text{dec} \in \mathbb{R}^{m \times d_k}\)</span> and <span class="math inline">\(K_\text{enc}, V_\text{enc} \in \mathbb{R}^{n \times d_k}\)</span>, so the score matrix is <span class="math inline">\(m \times n\)</span>: one row per output position, one column per source token. It is rectangular, unlike self-attention’s square matrix.</p>
+<p>For illustration: when a decoder is about to produce the Spanish word “gatos”, we would expect cross-attention to put much of its weight on the source token “cats”. That is the decoder dynamically deciding which part of the input matters for <em>this</em> output step.</p>
+<p>The paper uses multi-head attention in exactly three ways (Vaswani et al., 2017):</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Where</th>
+<th>Queries from</th>
+<th>Keys and values from</th>
+<th>Mask</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Encoder self-attention</td>
+<td>previous encoder layer</td>
+<td>previous encoder layer</td>
+<td>none</td>
+</tr>
+<tr class="even">
+<td>Decoder masked self-attention</td>
+<td>previous decoder layer</td>
+<td>previous decoder layer</td>
+<td>causal</td>
+</tr>
+<tr class="odd">
+<td>Encoder-decoder (cross) attention</td>
+<td>previous decoder layer</td>
+<td>final encoder output</td>
+<td>none</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="from-encoder-decoder-to-decoder-only" class="level2">
+<h2 class="anchored" data-anchor-id="from-encoder-decoder-to-decoder-only">From encoder-decoder to decoder-only</h2>
+<p>Modern LLMs such as GPT-style models, Llama, Mistral and Qwen use only the decoder, with the encoder and the cross-attention sub-layer removed.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="decoder-only.svg" class="img-fluid figure-img" alt="A stack of L blocks, each with LayerNorm, masked self-attention, residual addition, LayerNorm, feed-forward network and residual addition, followed by a final LayerNorm and a linear head."></p>
+<figcaption>A decoder-only (GPT-style) block with the Pre-Norm layout used by most modern LLMs (drawn for this article).</figcaption>
+</figure>
+</div>
+<p>What changes:</p>
+<ul>
+<li><strong>One sequence, one stack.</strong> The prompt and the continuation are a single token sequence. The same causal mask handles both: prompt tokens attend to earlier prompt tokens, and generated tokens attend to everything before them.</li>
+<li><strong>No cross-attention.</strong> There is no separate source to read from. Everything the model knows about the input is in the same sequence it is extending.</li>
+<li><strong>One objective.</strong> Training is plain next-token prediction on text, with every position in a sequence providing a training signal.</li>
+</ul>
+<p>Commonly cited reasons for the shift are simplicity (one model, one loss), and that the pretraining objective matches how the model is used at generation time. These are explanations from later work and practice rather than claims of the original paper, and encoder-decoder models are still used, particularly for tasks with a clearly separate input and output such as translation and summarization. Cross-attention also lives on in multimodal models, where an image encoder can supply keys and values to a language decoder.</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Family</th>
+<th>Attention pattern</th>
+<th>Examples</th>
+<th>Typical use</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Encoder-only</td>
+<td>bidirectional self-attention</td>
+<td>BERT (Devlin et al., 2018)</td>
+<td>classification, embeddings</td>
+</tr>
+<tr class="even">
+<td>Encoder-decoder</td>
+<td>bidirectional encoder, causal decoder, cross-attention</td>
+<td>original Transformer, T5 (Raffel et al., 2019), BART (Lewis et al., 2019)</td>
+<td>translation, summarization</td>
+</tr>
+<tr class="odd">
+<td>Decoder-only</td>
+<td>causal self-attention</td>
+<td>GPT-style models, Llama, Mistral, Qwen</td>
+<td>text generation, chat</td>
+</tr>
+</tbody>
+</table>
+<p>A note on the two diagrams. The original design applies layer normalization <em>after</em> the residual addition (<strong>Post-Norm</strong>: <span class="math inline">\(\text{LayerNorm}(x + \text{Sublayer}(x))\)</span>). Most modern decoder-only LLMs apply it <em>before</em> the sub-layer (<strong>Pre-Norm</strong>: <span class="math inline">\(x + \text{Sublayer}(\text{LayerNorm}(x))\)</span>). Why that matters is the subject of a later article in this series.</p>
+</section>
+<section id="common-pitfalls" class="level2">
+<h2 class="anchored" data-anchor-id="common-pitfalls">Common pitfalls</h2>
+<ul>
+<li><strong>Adding the mask in the wrong place.</strong> The mask is <em>added to the scores before softmax</em>. Multiplying the weights by 0 <em>after</em> softmax leaves rows that no longer sum to 1.</li>
+<li><strong>Forgetting the shift.</strong> If decoder inputs are not shifted relative to the targets, position <span class="math inline">\(i\)</span> sees the token it must predict. Training loss collapses toward zero and the model produces garbage at inference, because it learned to copy.</li>
+<li><strong>Confusing padding masks with causal masks.</strong> They solve different problems: a padding mask hides padding tokens in a batch, a causal mask hides future tokens. Real code often needs both, combined.</li>
+<li><strong>Fully masked rows.</strong> If every entry in a row is <span class="math inline">\(-\infty\)</span>, softmax computes <span class="math inline">\(0/0\)</span> and returns NaN (try <code>softmax(np.full((1, 3), -np.inf))</code>). Make sure every query has at least one allowed key, and in low-precision floats prefer the dtype’s most negative finite value over a literal infinity.</li>
+<li><strong>Mixing up cross-attention sources.</strong> Queries come from the decoder; keys and values come only from the encoder output. Swapping them changes what the layer computes.</li>
+<li><strong>Believing the mask only matters in training.</strong> It also matters at inference whenever several tokens are processed in parallel, for example when a long prompt is first fed through the model.</li>
+</ul>
+</section>
+<section id="summary" class="level2">
+<h2 class="anchored" data-anchor-id="summary">Summary</h2>
+<ul>
+<li>The original Transformer has an encoder (bidirectional self-attention) and a decoder (masked self-attention, then cross-attention, then a feed-forward network).</li>
+<li>The causal mask adds <span class="math inline">\(-\infty\)</span> above the diagonal of the score matrix, so future positions get exactly zero weight.</li>
+<li>The right shift of the decoder input prevents each position from seeing its own target; the mask prevents it from seeing later ones. Together they allow parallel training with teacher forcing.</li>
+<li>Cross-attention takes queries from the decoder and keys and values from the encoder output, with no causal mask.</li>
+<li>Decoder-only LLMs keep the masked self-attention stack and drop the encoder and cross-attention.</li>
+</ul>
+</section>
+<section id="references" class="level2">
+<h2 class="anchored" data-anchor-id="references">References</h2>
+<ul>
+<li>Vaswani, A., et al.&nbsp;(2017). <em>Attention Is All You Need.</em> NeurIPS 2017. <a href="https://arxiv.org/abs/1706.03762">arXiv:1706.03762</a>.</li>
+<li>Devlin, J., Chang, M.-W., Lee, K., Toutanova, K. (2018). <em>BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding.</em> <a href="https://arxiv.org/abs/1810.04805">arXiv:1810.04805</a>.</li>
+<li>Raffel, C., et al.&nbsp;(2019). <em>Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer (T5).</em> <a href="https://arxiv.org/abs/1910.10683">arXiv:1910.10683</a>.</li>
+<li>Lewis, M., et al.&nbsp;(2019). <em>BART: Denoising Sequence-to-Sequence Pre-training for Natural Language Generation, Translation, and Comprehension.</em> <a href="https://arxiv.org/abs/1910.13461">arXiv:1910.13461</a>.</li>
+<li>Roitman, H. <em>The Hitchhiker’s Guide to Agentic AI: From Foundations to Systems.</em> <a href="https://arxiv.org/abs/2606.24937">arXiv:2606.24937</a>.</li>
+</ul>
+<hr>
+<p>This work adapts material from “The Hitchhiker’s Guide to Agentic AI” by Haggai Roitman (arXiv:2606.24937v3, book version 1.4), licensed under CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/). Changes: adapted into standalone articles, with added explanations, diagrams and examples. This work is licensed under CC BY-SA 4.0.</p>
+
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+<footer class="footer">
+  <div class="nav-footer">
+    <div class="nav-footer-left">
+      &nbsp;
+    </div>   
+    <div class="nav-footer-center">
+<p>Content licensed under <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a></p>
+</div>
+    <div class="nav-footer-right">
+      &nbsp;
+    </div>
+  </div>
+</footer>
+
+
+
+
+</body></html>

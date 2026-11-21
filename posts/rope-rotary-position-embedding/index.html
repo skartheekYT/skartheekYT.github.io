@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.20">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="dcterms.date" content="2026-11-12">
+<meta name="description" content="RoPE encodes position by rotating queries and keys, so attention scores depend on content and relative distance only. Intuition, math, code.">
+
+<title>Positional Encoding, Part 2: Rotary Position Embedding (RoPE) – Agentic AI Notes</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../../">
+<script src="../../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../../site_libs/quarto-html/popper.min.js"></script>
+<script src="../../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../../site_libs/quarto-html/quarto-syntax-highlighting-17888a1159294d3eb470f19f6f52f5a5.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../../site_libs/bootstrap/bootstrap-17e92714493fce31463ccfbbc8488715.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+<script src="../../site_libs/quarto-diagram/mermaid.min.js"></script>
+<script src="../../site_libs/quarto-diagram/mermaid-init.js"></script>
+<link href="../../site_libs/quarto-diagram/mermaid.css" rel="stylesheet">
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../../styles.css">
+</head>
+
+<body class="nav-fixed quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a class="navbar-brand" href="../../index.html">
+    <span class="navbar-title">Agentic AI Notes</span>
+    </a>
+  </div>
+            <div id="quarto-search" class="" title="Search"></div>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+  <span class="navbar-toggler-icon"></span>
+</button>
+          <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav navbar-nav-scroll me-auto">
+  <li class="nav-item">
+    <a class="nav-link" href="../../index.html"> 
+<span class="menu-text">Home</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../blog.html"> 
+<span class="menu-text">Articles</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../about.html"> 
+<span class="menu-text">About</span></a>
+  </li>  
+</ul>
+          </div> <!-- /navcollapse -->
+            <div class="quarto-navbar-tools">
+</div>
+      </div> <!-- /container-fluid -->
+    </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">On this page</h2>
+   
+  <ul>
+  <li><a href="#the-goal" id="toc-the-goal" class="nav-link active" data-scroll-target="#the-goal">1. The goal</a></li>
+  <li><a href="#the-idea-in-2d" id="toc-the-idea-in-2d" class="nav-link" data-scroll-target="#the-idea-in-2d">2. The idea in 2D</a></li>
+  <li><a href="#from-2d-to-d-dimensions" id="toc-from-2d-to-d-dimensions" class="nav-link" data-scroll-target="#from-2d-to-d-dimensions">3. From 2D to <span class="math inline">\(d\)</span> dimensions</a></li>
+  <li><a href="#where-rope-is-applied-and-why-only-there" id="toc-where-rope-is-applied-and-why-only-there" class="nav-link" data-scroll-target="#where-rope-is-applied-and-why-only-there">4. Where RoPE is applied, and why only there</a></li>
+  <li><a href="#what-do-the-different-frequencies-do" id="toc-what-do-the-different-frequencies-do" class="nav-link" data-scroll-target="#what-do-the-different-frequencies-do">5. What do the different frequencies do?</a></li>
+  <li><a href="#long-term-decay-what-the-paper-claims-precisely" id="toc-long-term-decay-what-the-paper-claims-precisely" class="nav-link" data-scroll-target="#long-term-decay-what-the-paper-claims-precisely">6. Long-term decay: what the paper claims, precisely</a></li>
+  <li><a href="#compatibility-with-linear-attention" id="toc-compatibility-with-linear-attention" class="nav-link" data-scroll-target="#compatibility-with-linear-attention">7. Compatibility with linear attention</a></li>
+  <li><a href="#code" id="toc-code" class="nav-link" data-scroll-target="#code">8. Code</a></li>
+  <li><a href="#what-the-original-evidence-shows" id="toc-what-the-original-evidence-shows" class="nav-link" data-scroll-target="#what-the-original-evidence-shows">9. What the original evidence shows</a></li>
+  <li><a href="#common-pitfalls" id="toc-common-pitfalls" class="nav-link" data-scroll-target="#common-pitfalls">Common pitfalls</a></li>
+  <li><a href="#references" id="toc-references" class="nav-link" data-scroll-target="#references">References</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Positional Encoding, Part 2: Rotary Position Embedding (RoPE)</h1>
+  <div class="quarto-categories">
+    <div class="quarto-category">LLMs</div>
+    <div class="quarto-category">transformers</div>
+    <div class="quarto-category">positional-encoding</div>
+    <div class="quarto-category">RoPE</div>
+  </div>
+  </div>
+
+<div>
+  <div class="description">
+    RoPE encodes position by rotating queries and keys, so attention scores depend on content and relative distance only. Intuition, math, code.
+  </div>
+</div>
+
+
+<div class="quarto-title-meta">
+
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">November 12, 2026</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p><a href="../../posts/positional-encoding-basics/index.html">Part 1</a> showed why attention needs position information and covered the classic methods. Rotary Position Embedding (RoPE; Su et al., 2021, the “RoFormer” paper) is the method most modern open LLM families build on; the YaRN paper lists the LLaMA, GPT-NeoX and PaLM families as RoPE models. The idea fits in one sentence: <strong>rotate each query and key by an angle proportional to its position, and the dot product between them then automatically depends on how far apart they are.</strong></p>
+<section id="the-goal" class="level2">
+<h2 class="anchored" data-anchor-id="the-goal">1. The goal</h2>
+<p>Write the position-aware query and key as <span class="math inline">\(f_q(x_m, m)\)</span> and <span class="math inline">\(f_k(x_n, n)\)</span>, where <span class="math inline">\(x_m, x_n\)</span> are the embeddings of the tokens at positions <span class="math inline">\(m\)</span> and <span class="math inline">\(n\)</span>. We want their inner product to depend on the two contents and on the relative offset only:</p>
+<p><span class="math display">\[
+\langle f_q(x_m, m),\, f_k(x_n, n)\rangle = g(x_m, x_n, m-n)
+\]</span></p>
+<p><span class="math inline">\(g\)</span> is just “some function of those three things”. Why relative? A phrase should behave the same whether it sits at position 5 or at position 5000, and attention between two words should depend on how far apart they are, not on where in the document they happen to be.</p>
+</section>
+<section id="the-idea-in-2d" class="level2">
+<h2 class="anchored" data-anchor-id="the-idea-in-2d">2. The idea in 2D</h2>
+<p>Start with a query and a key that are 2-dimensional. The dot product of two vectors is <span class="math inline">\(|a||b|\cos(\text{angle between them})\)</span>. It only cares about the lengths and the angle between the vectors.</p>
+<p>So: <strong>rotate</strong> the query by <span class="math inline">\(m\theta\)</span> and the key by <span class="math inline">\(n\theta\)</span>, where <span class="math inline">\(\theta\)</span> is a fixed angle. Rotations do not change lengths. The angle between the rotated vectors is the original angle plus <span class="math inline">\((n-m)\theta\)</span>. Shift both positions by the same amount and nothing changes.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="rope-2d.svg" class="img-fluid figure-img"></p>
+<figcaption>Two positions with the same offset <span class="math inline">\(n-m=1\)</span> give the same angle between <span class="math inline">\(q'\)</span> and <span class="math inline">\(k'\)</span>.</figcaption>
+</figure>
+</div>
+<p>In symbols, with the rotation matrix <span class="math inline">\(R(\alpha) = \begin{pmatrix}\cos\alpha &amp; -\sin\alpha\\ \sin\alpha &amp; \cos\alpha\end{pmatrix}\)</span>:</p>
+<p><span class="math display">\[
+\tilde q_m = R(m\theta)\,W_q x_m, \qquad
+\tilde k_n = R(n\theta)\,W_k x_n
+\]</span></p>
+<p><span class="math inline">\(W_q, W_k\)</span> are the usual learned projections; <span class="math inline">\(\theta\)</span> is a fixed constant; <span class="math inline">\(\tilde q_m,\tilde k_n\)</span> are the position-encoded query and key. Their dot product is</p>
+<p><span class="math display">\[
+\tilde q_m^\top \tilde k_n
+= (W_q x_m)^\top R(m\theta)^\top R(n\theta)\,(W_k x_n)
+= (W_q x_m)^\top R\big((n-m)\theta\big)\,(W_k x_n)
+\]</span></p>
+<p>The middle step uses two facts about rotations: <span class="math inline">\(R(\alpha)^\top = R(-\alpha)\)</span> and <span class="math inline">\(R(\alpha)R(\beta) = R(\alpha+\beta)\)</span>. The absolute positions <span class="math inline">\(m\)</span> and <span class="math inline">\(n\)</span> have disappeared; only <span class="math inline">\(n-m\)</span> survives.</p>
+<p>The RoFormer paper derives this as a solution of the requirement in Section 1, using complex numbers. The full derivation, including the assumptions it makes, is on the <a href="../../posts/rope-rotary-position-embedding/rope-derivation.html">companion page</a>.</p>
+</section>
+<section id="from-2d-to-d-dimensions" class="level2">
+<h2 class="anchored" data-anchor-id="from-2d-to-d-dimensions">3. From 2D to <span class="math inline">\(d\)</span> dimensions</h2>
+<p>Real queries have <span class="math inline">\(d\)</span> dimensions (the head dimension, often 64 or 128). RoPE splits them into <span class="math inline">\(d/2\)</span> pairs <span class="math inline">\((x^{(1)},x^{(2)}), (x^{(3)},x^{(4)}),\dots\)</span> and rotates each pair as its own 2D plane, <strong>each with its own angle</strong>:</p>
+<p><span class="math display">\[
+\theta_i = 10000^{-2i/d}, \qquad i = 0, 1, \dots, \tfrac d2 - 1
+\]</span></p>
+<p>(The paper indexes <span class="math inline">\(i\)</span> from 1 and writes <span class="math inline">\(10000^{-2(i-1)/d}\)</span>; it is the same set of values.) At position <span class="math inline">\(m\)</span> pair <span class="math inline">\(i\)</span> is rotated by <span class="math inline">\(m\theta_i\)</span>. As a matrix, this is block-diagonal:</p>
+<p><span class="math display">\[
+R^d_{\Theta,m} = \begin{pmatrix}
+R(m\theta_0) &amp; &amp; \\
+&amp; R(m\theta_1) &amp; \\
+&amp; &amp; \ddots
+\end{pmatrix},
+\qquad
+\tilde q_m^\top \tilde k_n = x_m^\top W_q^\top\, R^d_{\Theta,\,n-m}\, W_k x_n
+\]</span></p>
+<p>Because each block is a rotation, <span class="math inline">\(R^d_{\Theta,m}\)</span> is orthogonal: it preserves the norm of <span class="math inline">\(q\)</span> and <span class="math inline">\(k\)</span>, so RoPE does not change the scale of the scores. It adds no parameters. <span class="math inline">\(d\)</span> must be even.</p>
+<p><strong>Efficient form.</strong> Building the full matrix wastes work because it is mostly zeros. Rotating a pair <span class="math inline">\((a,b)\)</span> by <span class="math inline">\(\alpha\)</span> gives <span class="math inline">\((a\cos\alpha - b\sin\alpha,\ a\sin\alpha + b\cos\alpha)\)</span>, which is <span class="math inline">\((a,b)\cos\alpha + (-b,a)\sin\alpha\)</span>. For the whole vector:</p>
+<p><span class="math display">\[
+R^d_{\Theta,m}\,x = x \odot \begin{pmatrix}\cos m\theta_0\\ \cos m\theta_0\\ \cos m\theta_1\\ \cos m\theta_1\\ \vdots\end{pmatrix}
++ \begin{pmatrix}-x^{(2)}\\ x^{(1)}\\ -x^{(4)}\\ x^{(3)}\\ \vdots\end{pmatrix} \odot \begin{pmatrix}\sin m\theta_0\\ \sin m\theta_0\\ \sin m\theta_1\\ \sin m\theta_1\\ \vdots\end{pmatrix}
+\]</span></p>
+<p>where <span class="math inline">\(\odot\)</span> is element-wise multiplication. This is a couple of element-wise operations on <span class="math inline">\(x\)</span>, with the cos and sin tables computed once.</p>
+</section>
+<section id="where-rope-is-applied-and-why-only-there" class="level2">
+<h2 class="anchored" data-anchor-id="where-rope-is-applied-and-why-only-there">4. Where RoPE is applied, and why only there</h2>
+<div class="cell" data-layout-align="default">
+<div class="cell-output-display">
+<div>
+<p></p><figure class="figure"><p></p>
+<div>
+<pre class="mermaid mermaid-js">flowchart LR
+  X["&lt;b&gt;Token embedding&lt;/b&gt;&lt;br/&gt;xₘ"] --&gt; Q["&lt;b&gt;Query&lt;/b&gt;&lt;br/&gt;W_q xₘ"] --&gt; RQ["&lt;b&gt;Rotate by position&lt;/b&gt;&lt;br/&gt;q̃ₘ = R_{Θ,m} W_q xₘ"]
+  X --&gt; K["&lt;b&gt;Key&lt;/b&gt;&lt;br/&gt;W_k xₘ"] --&gt; RK["&lt;b&gt;Rotate by position&lt;/b&gt;&lt;br/&gt;k̃ₘ = R_{Θ,m} W_k xₘ"]
+  X --&gt; V["&lt;b&gt;Value&lt;/b&gt;&lt;br/&gt;vₘ = W_v xₘ&lt;br/&gt;(not rotated)"]
+  RQ --&gt; S["&lt;b&gt;Scores&lt;/b&gt;&lt;br/&gt;q̃ₘᵀ k̃ₙ / √d"]
+  RK --&gt; S
+  S --&gt; O["&lt;b&gt;Output&lt;/b&gt;&lt;br/&gt;oₘ = Σₙ aₘₙ vₙ"]
+  V --&gt; O
+</pre>
+</div>
+<p></p></figure><p></p>
+</div>
+</div>
+</div>
+<p>RoPE rotates the <strong>query and key only</strong>, <strong>after</strong> their projections, <strong>inside every attention layer</strong>. Three reasons:</p>
+<ol type="1">
+<li><strong>It must act right before the dot product.</strong> The collapse to <span class="math inline">\(R_{n-m}\)</span> needs the rotations to sit directly between <span class="math inline">\(W_q x_m\)</span> and <span class="math inline">\(W_k x_n\)</span>. If you rotated the input embedding instead, you would get <span class="math inline">\(x_m^\top R_m^\top W_q^\top W_k R_n x_n\)</span>, and because <span class="math inline">\(W_q^\top W_k\)</span> does not generally commute with a rotation, no relative-only form comes out.</li>
+<li><strong>Values do not take part in the score.</strong> Position should decide <em>how much</em> token <span class="math inline">\(n\)</span> contributes to token <span class="math inline">\(m\)</span> (the weight <span class="math inline">\(a_{mn}\)</span>), not rotate <em>what</em> it contributes. If <span class="math inline">\(v_n\)</span> were rotated by its absolute position, the layer’s output would pick up absolute-position dependence, which works against the relative-only design. In the RoFormer paper the values stay as <span class="math inline">\(W_v x_n\)</span>.</li>
+<li><strong>Every layer gets fresh position information.</strong> Additive encodings enter once at the input and have to survive through all the layers. RoPE re-applies the rotation to the new <span class="math inline">\(q\)</span> and <span class="math inline">\(k\)</span> in each layer.</li>
+</ol>
+</section>
+<section id="what-do-the-different-frequencies-do" class="level2">
+<h2 class="anchored" data-anchor-id="what-do-the-different-frequencies-do">5. What do the different frequencies do?</h2>
+<p>Pair <span class="math inline">\(i\)</span> rotates by <span class="math inline">\(\theta_i\)</span> radians per token, so it completes a full turn every <span class="math inline">\(\lambda_i = 2\pi/\theta_i = 2\pi\cdot 10000^{2i/d}\)</span> tokens. These are the same geometric frequencies as the sinusoidal encoding of Part 1, now applied by rotation to <span class="math inline">\(q\)</span> and <span class="math inline">\(k\)</span>. For a head dimension <span class="math inline">\(d=128\)</span>:</p>
+<ul>
+<li>pair <span class="math inline">\(0\)</span> turns every <span class="math inline">\(2\pi\approx 6.3\)</span> tokens (about one radian per token);</li>
+<li>pair <span class="math inline">\(63\)</span> (the slowest) turns every <span class="math inline">\(\approx 54{,}000\)</span> tokens.</li>
+</ul>
+<p>Think of the hands of a clock. Fast pairs tell nearby offsets apart precisely, but they wrap around, so at long range a fast pair’s angle is ambiguous. Slow pairs barely move across a few tokens, but their angle changes steadily over thousands of tokens, which gives a coarse sense of large distances. Part 3 builds on this: extending context windows is mostly about what to do with the slow pairs.</p>
+</section>
+<section id="long-term-decay-what-the-paper-claims-precisely" class="level2">
+<h2 class="anchored" data-anchor-id="long-term-decay-what-the-paper-claims-precisely">6. Long-term decay: what the paper claims, precisely</h2>
+<p>The paper states that with <span class="math inline">\(\theta_i = 10000^{-2i/d}\)</span> the inner product has a <strong>long-term decay</strong>: the dependence between tokens shrinks as their relative distance grows. The argument bounds the score by an expression involving <span class="math inline">\(\frac{2}{d}\sum_j |S_j|\)</span>, where <span class="math inline">\(S_j=\sum_{l&lt;j}e^{\mathrm{i}(m-n)\theta_l}\)</span> is a sum of unit complex numbers rotating at the pair frequencies. The paper then shows numerically that this average shrinks (with oscillations) as <span class="math inline">\(|m-n|\)</span> grows.</p>
+<p>Two honest qualifiers. This is a bound on a <em>proxy</em>, not a statement that every attention weight decays with distance. A model can learn to concentrate its query and key energy in slow pairs and attend far away. And the paper’s own limitations section says the authors do not have a faithful explanation for why RoPE converges faster, or does better on long texts, than the baselines. Details and our own plot of the proxy are on the <a href="../../posts/rope-rotary-position-embedding/rope-derivation.html">companion page</a>.</p>
+</section>
+<section id="compatibility-with-linear-attention" class="level2">
+<h2 class="anchored" data-anchor-id="compatibility-with-linear-attention">7. Compatibility with linear attention</h2>
+<p>Standard attention computes all <span class="math inline">\(N^2\)</span> query-key scores. <em>Linear attention</em> (Katharopoulos et al., 2020) replaces <span class="math inline">\(\exp(q^\top k/\sqrt d)\)</span> by a kernel <span class="math inline">\(\phi(q)^\top\varphi(k)\)</span> with non-negative feature maps <span class="math inline">\(\phi,\varphi\)</span>. Then the sum <span class="math inline">\(\sum_n \varphi(k_n)v_n^\top\)</span> can be computed once and reused for every query, giving <span class="math inline">\(O(N)\)</span> cost.</p>
+<p>Additive position encodings and relative biases put position <em>inside the pairwise score</em>, which does not factor into a separate function of <span class="math inline">\(q\)</span> and of <span class="math inline">\(k\)</span>. RoPE acts on each vector separately, so it still factors. The paper rotates the feature-mapped vectors:</p>
+<p><span class="math display">\[
+\text{Attn}(Q,K,V)_m = \frac{\sum_n \big(R^d_{\Theta,m}\phi(q_m)\big)^\top\big(R^d_{\Theta,n}\varphi(k_n)\big)\, v_n}{\sum_n \phi(q_m)^\top\varphi(k_n)}
+\]</span></p>
+<p>The denominator is left <strong>unrotated</strong>: rotated terms can be negative, and a sum of mixed-sign terms could hit zero. The numerator can then contain negative terms, so the weights are not strictly probabilities, but the paper argues they still model importance. The paper demonstrates this with a Performer (a linear-attention transformer) on enwik8, where adding RoPE lowered the training loss.</p>
+</section>
+<section id="code" class="level2">
+<h2 class="anchored" data-anchor-id="code">8. Code</h2>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> rope_freqs(d, base<span class="op">=</span><span class="fl">10000.0</span>):</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> base <span class="op">**</span> (<span class="op">-</span><span class="fl">2.0</span> <span class="op">*</span> np.arange(d <span class="op">//</span> <span class="dv">2</span>) <span class="op">/</span> d)            <span class="co"># theta_i</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> apply_rope(x, positions, base<span class="op">=</span><span class="fl">10000.0</span>):</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""x: (L, d), d even, interleaved pairs (x0,x1), (x2,x3), ...</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="co">    positions: (L,) integer positions."""</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    L, d <span class="op">=</span> x.shape</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    ang <span class="op">=</span> np.outer(positions, rope_freqs(d, base))           <span class="co"># (L, d/2): m * theta_i</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    cos <span class="op">=</span> np.repeat(np.cos(ang), <span class="dv">2</span>, axis<span class="op">=</span><span class="dv">1</span>)                  <span class="co"># (L, d)</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    sin <span class="op">=</span> np.repeat(np.sin(ang), <span class="dv">2</span>, axis<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    rot <span class="op">=</span> np.empty_like(x)</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    rot[:, <span class="dv">0</span>::<span class="dv">2</span>], rot[:, <span class="dv">1</span>::<span class="dv">2</span>] <span class="op">=</span> <span class="op">-</span>x[:, <span class="dv">1</span>::<span class="dv">2</span>], x[:, <span class="dv">0</span>::<span class="dv">2</span>]     <span class="co"># (-x2, x1, -x4, x3, ...)</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> x <span class="op">*</span> cos <span class="op">+</span> rot <span class="op">*</span> sin</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> rope_matrix(m, d, base<span class="op">=</span><span class="fl">10000.0</span>):                         <span class="co"># slow reference version</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    R <span class="op">=</span> np.zeros((d, d))</span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i, th <span class="kw">in</span> <span class="bu">enumerate</span>(rope_freqs(d, base)):</span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>        c, s <span class="op">=</span> np.cos(m <span class="op">*</span> th), np.sin(m <span class="op">*</span> th)</span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>        R[<span class="dv">2</span><span class="op">*</span>i:<span class="dv">2</span><span class="op">*</span>i<span class="op">+</span><span class="dv">2</span>, <span class="dv">2</span><span class="op">*</span>i:<span class="dv">2</span><span class="op">*</span>i<span class="op">+</span><span class="dv">2</span>] <span class="op">=</span> [[c, <span class="op">-</span>s], [s, c]]</span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> R</span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>rng <span class="op">=</span> np.random.default_rng(<span class="dv">0</span>)</span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>d <span class="op">=</span> <span class="dv">16</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>q, k <span class="op">=</span> rng.normal(size<span class="op">=</span>d), rng.normal(size<span class="op">=</span>d)</span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a><span class="co"># 1) the efficient form equals the matrix form</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(np.<span class="bu">abs</span>(apply_rope(q[<span class="va">None</span>], [<span class="dv">7</span>])[<span class="dv">0</span>] <span class="op">-</span> rope_matrix(<span class="dv">7</span>, d) <span class="op">@</span> q).<span class="bu">max</span>())   <span class="co"># ~0</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a><span class="co"># 2) the score depends only on the offset n - m</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>score <span class="op">=</span> <span class="kw">lambda</span> m, n: apply_rope(q[<span class="va">None</span>], [m])[<span class="dv">0</span>] <span class="op">@</span> apply_rope(k[<span class="va">None</span>], [n])[<span class="dv">0</span>]</span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(score(<span class="dv">3</span>, <span class="dv">10</span>), score(<span class="dv">103</span>, <span class="dv">110</span>), score(<span class="dv">1003</span>, <span class="dv">1010</span>))                   <span class="co"># all equal</span></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(score(<span class="dv">3</span>, <span class="dv">10</span>), score(<span class="dv">3</span>, <span class="dv">11</span>))                                         <span class="co"># different offset</span></span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a><span class="co"># 3) norms are preserved</span></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(np.linalg.norm(q), np.linalg.norm(apply_rope(q[<span class="va">None</span>], [<span class="dv">500</span>])[<span class="dv">0</span>]))</span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a><span class="co"># 4) caching rotated keys works: each key is rotated once, by its own position</span></span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a>K <span class="op">=</span> rng.normal(size<span class="op">=</span>(<span class="dv">6</span>, d))<span class="op">;</span> Q <span class="op">=</span> rng.normal(size<span class="op">=</span>(<span class="dv">6</span>, d))</span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>K_cached <span class="op">=</span> apply_rope(K, np.arange(<span class="dv">6</span>))</span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a>full <span class="op">=</span> apply_rope(Q, np.arange(<span class="dv">6</span>)) <span class="op">@</span> K_cached.T</span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a>step <span class="op">=</span> apply_rope(Q[<span class="dv">5</span>:<span class="dv">6</span>], [<span class="dv">5</span>]) <span class="op">@</span> K_cached.T                                 <span class="co"># new token only</span></span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(np.<span class="bu">abs</span>(full[<span class="dv">5</span>] <span class="op">-</span> step[<span class="dv">0</span>]).<span class="bu">max</span>())                                      <span class="co"># ~0</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p><strong>KV cache.</strong> During generation, the keys of past tokens are cached. With plain RoPE you can cache keys <em>after</em> rotation: each key is rotated once by its own position, and a new query rotated by its own position gives the right relative score against all of them (check 4 above). One caveat appears in Part 3: methods that change the scaling as the sequence grows (dynamic scaling) require caching keys <em>before</em> rotation, because every token’s rotation changes when the scale changes.</p>
+</section>
+<section id="what-the-original-evidence-shows" class="level2">
+<h2 class="anchored" data-anchor-id="what-the-original-evidence-shows">9. What the original evidence shows</h2>
+<p>It is worth knowing how modest the original experiments were, since RoPE’s current dominance comes mainly from later large-scale use:</p>
+<ul>
+<li>WMT 2014 English-to-German translation: BLEU 27.5 for RoFormer versus 27.3 for the Transformer-base baseline.</li>
+<li>BERT-style pre-training with RoPE in place of the position encoding: faster convergence of the masked-language-model loss.</li>
+<li>GLUE fine-tuning: better on three of six tasks (MRPC, STS-B, QQP), worse on the other three (SST-2, QNLI, MNLI).</li>
+<li>Chinese long documents (CAIL2019-SCM): accuracy improves when the input length goes from 512 to 1024 characters.</li>
+</ul>
+</section>
+<section id="common-pitfalls" class="level2">
+<h2 class="anchored" data-anchor-id="common-pitfalls">Common pitfalls</h2>
+<ul>
+<li><strong>Interleaved versus split-half pairing.</strong> Some code pairs dimensions <span class="math inline">\((2i, 2i+1)\)</span> (as above); other code pairs <span class="math inline">\((i, i+d/2)\)</span> and uses a “rotate half” trick. Both are valid <em>if used consistently</em> (they differ by a fixed permutation of dimensions), but pretrained weights assume one layout. Loading weights with the wrong convention silently wrecks the model.</li>
+<li><strong>Rotating <span class="math inline">\(V\)</span> or the raw embeddings.</strong> Only <span class="math inline">\(q\)</span> and <span class="math inline">\(k\)</span>, and after the projections.</li>
+<li><strong>Rotating <span class="math inline">\(q\)</span> and <span class="math inline">\(k\)</span> in different directions or with different bases.</strong> The relative-position identity needs the same rotation convention for both.</li>
+<li><strong>Odd head dimension.</strong> RoPE pairs dimensions, so <span class="math inline">\(d\)</span> must be even.</li>
+<li><strong>Low-precision angles.</strong> At large positions <span class="math inline">\(m\theta_i\)</span> is a large number and the cos and sin tables lose accuracy in float16 or bfloat16. A common practice is to compute the angles in float32.</li>
+<li><strong>“Relative” does not mean “extrapolates.”</strong> Plain RoPE still fails beyond the training length. The slow pairs never complete a full rotation within the training length, and the YaRN authors argue that this lets them act as absolute position markers; this is the observation that motivates Part 3.</li>
+<li><strong>Mixing up the sign convention</strong> (<span class="math inline">\(m-n\)</span> versus <span class="math inline">\(n-m\)</span>) when comparing formulas across papers. It only flips the direction of rotation.</li>
+</ul>
+</section>
+<section id="references" class="level2">
+<h2 class="anchored" data-anchor-id="references">References</h2>
+<ul>
+<li>Su, Lu, Pan, Murtadha, Wen, Liu (2021). <em>RoFormer: Enhanced Transformer with Rotary Position Embedding.</em> arXiv:2104.09864.</li>
+<li>Vaswani et al.&nbsp;(2017). <em>Attention Is All You Need.</em> arXiv:1706.03762.</li>
+<li>Katharopoulos, Vyas, Pappas, Fleuret (2020). <em>Transformers are RNNs: Fast Autoregressive Transformers with Linear Attention.</em> arXiv:2006.16236.</li>
+<li>Choromanski et al.&nbsp;(2020). <em>Rethinking Attention with Performers.</em> arXiv:2009.14794.</li>
+<li>Peng, Quesnelle, Fan, Shippole (2023). <em>YaRN: Efficient Context Window Extension of Large Language Models.</em> arXiv:2309.00071.</li>
+</ul>
+<hr>
+<p>This work adapts material from “The Hitchhiker’s Guide to Agentic AI” by Haggai Roitman (arXiv:2606.24937v3, book version 1.4), licensed under CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/). Changes: adapted into standalone articles, with added explanations, diagrams and examples. This work is licensed under CC BY-SA 4.0.</p>
+
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+<footer class="footer">
+  <div class="nav-footer">
+    <div class="nav-footer-left">
+      &nbsp;
+    </div>   
+    <div class="nav-footer-center">
+<p>Content licensed under <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a></p>
+</div>
+    <div class="nav-footer-right">
+      &nbsp;
+    </div>
+  </div>
+</footer>
+
+
+
+
+</body></html>

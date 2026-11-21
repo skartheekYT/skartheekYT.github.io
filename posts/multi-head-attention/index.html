@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.20">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="dcterms.date" content="2026-11-07">
+<meta name="description" content="How multi-head attention splits one wide attention into several narrower ones, why that costs the same, what the original ablations showed, and how to read claims about what heads learn.">
+
+<title>Multi-Head Attention: Several Views of the Same Sequence – Agentic AI Notes</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../../">
+<script src="../../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../../site_libs/quarto-html/popper.min.js"></script>
+<script src="../../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../../site_libs/quarto-html/quarto-syntax-highlighting-17888a1159294d3eb470f19f6f52f5a5.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../../site_libs/bootstrap/bootstrap-17e92714493fce31463ccfbbc8488715.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+<script src="../../site_libs/quarto-diagram/mermaid.min.js"></script>
+<script src="../../site_libs/quarto-diagram/mermaid-init.js"></script>
+<link href="../../site_libs/quarto-diagram/mermaid.css" rel="stylesheet">
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../../styles.css">
+</head>
+
+<body class="nav-fixed quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a class="navbar-brand" href="../../index.html">
+    <span class="navbar-title">Agentic AI Notes</span>
+    </a>
+  </div>
+            <div id="quarto-search" class="" title="Search"></div>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+  <span class="navbar-toggler-icon"></span>
+</button>
+          <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav navbar-nav-scroll me-auto">
+  <li class="nav-item">
+    <a class="nav-link" href="../../index.html"> 
+<span class="menu-text">Home</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../blog.html"> 
+<span class="menu-text">Articles</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../about.html"> 
+<span class="menu-text">About</span></a>
+  </li>  
+</ul>
+          </div> <!-- /navcollapse -->
+            <div class="quarto-navbar-tools">
+</div>
+      </div> <!-- /container-fluid -->
+    </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">On this page</h2>
+   
+  <ul>
+  <li><a href="#why-one-attention-is-not-enough" id="toc-why-one-attention-is-not-enough" class="nav-link active" data-scroll-target="#why-one-attention-is-not-enough">Why one attention is not enough</a></li>
+  <li><a href="#the-formulas" id="toc-the-formulas" class="nav-link" data-scroll-target="#the-formulas">The formulas</a></li>
+  <li><a href="#why-the-cost-stays-the-same" id="toc-why-the-cost-stays-the-same" class="nav-link" data-scroll-target="#why-the-cost-stays-the-same">Why the cost stays the same</a></li>
+  <li><a href="#an-efficient-implementation" id="toc-an-efficient-implementation" class="nav-link" data-scroll-target="#an-efficient-implementation">An efficient implementation</a></li>
+  <li><a href="#what-the-paper-measured" id="toc-what-the-paper-measured" class="nav-link" data-scroll-target="#what-the-paper-measured">What the paper measured</a></li>
+  <li><a href="#what-do-heads-actually-learn" id="toc-what-do-heads-actually-learn" class="nav-link" data-scroll-target="#what-do-heads-actually-learn">What do heads actually learn?</a></li>
+  <li><a href="#common-pitfalls" id="toc-common-pitfalls" class="nav-link" data-scroll-target="#common-pitfalls">Common pitfalls</a></li>
+  <li><a href="#summary" id="toc-summary" class="nav-link" data-scroll-target="#summary">Summary</a></li>
+  <li><a href="#references" id="toc-references" class="nav-link" data-scroll-target="#references">References</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Multi-Head Attention: Several Views of the Same Sequence</h1>
+<p class="subtitle lead">Shapes, why the cost stays the same, what the paper measured, and what heads actually learn</p>
+  <div class="quarto-categories">
+    <div class="quarto-category">LLM fundamentals</div>
+    <div class="quarto-category">Transformers</div>
+    <div class="quarto-category">Attention</div>
+  </div>
+  </div>
+
+<div>
+  <div class="description">
+    How multi-head attention splits one wide attention into several narrower ones, why that costs the same, what the original ablations showed, and how to read claims about what heads learn.
+  </div>
+</div>
+
+
+<div class="quarto-title-meta">
+
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">November 7, 2026</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>This is the third article on attention. We have <a href="../../posts/attention-scaled-dot-product/index.html">scaled dot-product attention</a> and we know how to <a href="../../posts/attention-masks-encoder-decoder/index.html">mask it and use it across an encoder and a decoder</a>. Now we answer a natural question: why does every real Transformer run attention <em>several times in parallel</em> rather than once?</p>
+<section id="why-one-attention-is-not-enough" class="level2">
+<h2 class="anchored" data-anchor-id="why-one-attention-is-not-enough">Why one attention is not enough</h2>
+<p>A single attention operation gives each token <strong>one</strong> softmax distribution and therefore <strong>one</strong> weighted average of the value vectors. That average has to serve every purpose at once. Consider the word “it” in a sentence. To build a good representation, the model may want to look at the noun that “it” refers to, at the verb it is the subject of, and at a nearby punctuation mark, and these are different questions that deserve different weightings.</p>
+<p>The original paper puts the problem this way: with a single head, averaging inhibits the model’s ability to attend to information from different representation subspaces at different positions (Vaswani et al., 2017). The same paper notes that self-attention relates any two positions in a constant number of operations, at the price of reduced effective resolution because attention-weighted positions are averaged, and that multi-head attention is what counteracts this effect.</p>
+<p>The idea of <strong>multi-head attention</strong>: run <span class="math inline">\(h\)</span> smaller attentions in parallel, each with its own learned projections (its own notion of “query”, “key” and “value”), then concatenate their results and mix them with one more projection.</p>
+</section>
+<section id="the-formulas" class="level2">
+<h2 class="anchored" data-anchor-id="the-formulas">The formulas</h2>
+<p>For head <span class="math inline">\(i \in \{1, \dots, h\}\)</span>:</p>
+<p><span class="math display">\[
+\text{head}_i = \text{Attention}\big(X W_i^Q,\; X W_i^K,\; X W_i^V\big),
+\qquad
+\text{MultiHead}(X) = \text{Concat}(\text{head}_1, \dots, \text{head}_h)\, W^O
+\]</span></p>
+<p>(In self-attention the queries, keys and values all start from the same input <span class="math inline">\(X\)</span>. In cross-attention the keys and values start from the encoder output instead.)</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Symbol</th>
+<th>Meaning</th>
+<th>Value in the original paper</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><span class="math inline">\(n\)</span></td>
+<td>number of tokens</td>
+<td>—</td>
+</tr>
+<tr class="even">
+<td><span class="math inline">\(d_\text{model}\)</span></td>
+<td>width of the token vectors</td>
+<td>512</td>
+</tr>
+<tr class="odd">
+<td><span class="math inline">\(h\)</span></td>
+<td>number of heads</td>
+<td>8</td>
+</tr>
+<tr class="even">
+<td><span class="math inline">\(d_k, d_v\)</span></td>
+<td>per-head query/key size and value size, <span class="math inline">\(d_k = d_v = d_\text{model}/h\)</span></td>
+<td>64</td>
+</tr>
+<tr class="odd">
+<td><span class="math inline">\(W_i^Q, W_i^K\)</span></td>
+<td>per-head projections, <span class="math inline">\(d_\text{model} \times d_k\)</span></td>
+<td><span class="math inline">\(512 \times 64\)</span></td>
+</tr>
+<tr class="even">
+<td><span class="math inline">\(W_i^V\)</span></td>
+<td>per-head projection, <span class="math inline">\(d_\text{model} \times d_v\)</span></td>
+<td><span class="math inline">\(512 \times 64\)</span></td>
+</tr>
+<tr class="odd">
+<td><span class="math inline">\(W^O\)</span></td>
+<td>output projection, <span class="math inline">\((h \cdot d_v) \times d_\text{model}\)</span></td>
+<td><span class="math inline">\(512 \times 512\)</span></td>
+</tr>
+</tbody>
+</table>
+<div class="cell" data-layout-align="default">
+<div class="cell-output-display">
+<div>
+<p></p><figure class="figure"><p></p>
+<div>
+<pre class="mermaid mermaid-js">flowchart TB
+  X["&lt;b&gt;Input X&lt;/b&gt;&lt;br/&gt;(n×d_model)"]
+  X --&gt; H1["&lt;b&gt;Head 1&lt;/b&gt;&lt;br/&gt;Attention(X·W_Q1, X·W_K1, X·W_V1)&lt;br/&gt;(n×d_v)"]
+  X --&gt; H2["&lt;b&gt;Head 2&lt;/b&gt;&lt;br/&gt;Attention(X·W_Q2, X·W_K2, X·W_V2)&lt;br/&gt;(n×d_v)"]
+  X --&gt; HH["&lt;b&gt;Head h&lt;/b&gt;&lt;br/&gt;Attention(X·W_Qh, X·W_Kh, X·W_Vh)&lt;br/&gt;(n×d_v)"]
+  H1 --&gt; C["&lt;b&gt;Concat&lt;/b&gt;&lt;br/&gt;(n×h·d_v)"]
+  H2 --&gt; C
+  HH --&gt; C
+  C --&gt; O["&lt;b&gt;Output projection&lt;/b&gt;&lt;br/&gt;Concat · W_O (n×d_model)"]
+</pre>
+</div>
+<p></p></figure><p></p>
+</div>
+</div>
+</div>
+<p>Follow the shapes with <span class="math inline">\(d_\text{model} = 512\)</span> and <span class="math inline">\(h = 8\)</span>:</p>
+<ol type="1">
+<li>Each head projects <span class="math inline">\(X\)</span> (<span class="math inline">\(n \times 512\)</span>) down to <span class="math inline">\(n \times 64\)</span> queries, keys and values.</li>
+<li>Each head computes its own <span class="math inline">\(n \times n\)</span> attention weights and produces an <span class="math inline">\(n \times 64\)</span> output.</li>
+<li>Concatenating 8 outputs of width 64 gives <span class="math inline">\(n \times 512\)</span> again.</li>
+<li><span class="math inline">\(W^O\)</span> (<span class="math inline">\(512 \times 512\)</span>) mixes the heads’ outputs, giving the layer’s final <span class="math inline">\(n \times 512\)</span> output.</li>
+</ol>
+<p>The output has the same shape as the input, so layers can be stacked.</p>
+</section>
+<section id="why-the-cost-stays-the-same" class="level2">
+<h2 class="anchored" data-anchor-id="why-the-cost-stays-the-same">Why the cost stays the same</h2>
+<p>It is natural to assume 8 heads cost 8 times as much. They do not, because each head works in a space <span class="math inline">\(h\)</span> times <em>smaller</em>. The paper states that, due to the reduced dimension of each head, the total computational cost is similar to single-head attention with full dimensionality (Vaswani et al., 2017). Here is the arithmetic.</p>
+<p><strong>Parameters.</strong> One head has three projections of <span class="math inline">\(512 \times 64\)</span>, i.e.&nbsp;<span class="math inline">\(3 \cdot 512 \cdot 64 = 98{,}304\)</span> weights. Eight heads: <span class="math inline">\(786{,}432\)</span>. Add <span class="math inline">\(W^O\)</span> (<span class="math inline">\(512 \times 512 = 262{,}144\)</span>) for a total of <span class="math inline">\(1{,}048{,}576 = 4 \cdot 512^2\)</span>. A single full-width head would use three <span class="math inline">\(512 \times 512\)</span> matrices plus the same output matrix: exactly the same count.</p>
+<p><strong>Compute.</strong> Computing the scores <span class="math inline">\(QK^\top\)</span> for one head costs about <span class="math inline">\(n^2 \cdot d_k\)</span> multiply-adds. For <span class="math inline">\(h\)</span> heads that is <span class="math inline">\(n^2 \cdot h \cdot d_k = n^2 \cdot d_\text{model}\)</span>, the same as one full-width head (<span class="math inline">\(d_k = d_\text{model}\)</span>).</p>
+<p>So multi-head attention does not add capacity. It <em>partitions</em> the same width into <span class="math inline">\(h\)</span> independent subspaces, each with its own softmax. One thing does grow: there are now <span class="math inline">\(h\)</span> separate <span class="math inline">\(n \times n\)</span> weight matrices to hold in memory, which is part of why attention memory becomes a problem for long sequences (see the <a href="../../posts/attention-cost-kv-cache/index.html">fourth article</a>).</p>
+</section>
+<section id="an-efficient-implementation" class="level2">
+<h2 class="anchored" data-anchor-id="an-efficient-implementation">An efficient implementation</h2>
+<p>In practice you do not loop over heads. You project once with full-width matrices and then <em>reshape</em> the result so that each head gets its own slice of the columns:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> softmax(z, axis<span class="op">=-</span><span class="dv">1</span>):</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    z <span class="op">=</span> z <span class="op">-</span> z.<span class="bu">max</span>(axis<span class="op">=</span>axis, keepdims<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    e <span class="op">=</span> np.exp(z)</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> e <span class="op">/</span> e.<span class="bu">sum</span>(axis<span class="op">=</span>axis, keepdims<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> multi_head_attention(X, W_Q, W_K, W_V, W_O, h, mask<span class="op">=</span><span class="va">None</span>):</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    n, d_model <span class="op">=</span> X.shape</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    d_k <span class="op">=</span> d_model <span class="op">//</span> h                                  <span class="co"># d_model must be divisible by h</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> split(M):                                       <span class="co"># (n, d_model) -&gt; (h, n, d_k)</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> M.reshape(n, h, d_k).transpose(<span class="dv">1</span>, <span class="dv">0</span>, <span class="dv">2</span>)</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    Q, K, V <span class="op">=</span> split(X <span class="op">@</span> W_Q), split(X <span class="op">@</span> W_K), split(X <span class="op">@</span> W_V)</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    scores <span class="op">=</span> Q <span class="op">@</span> K.transpose(<span class="dv">0</span>, <span class="dv">2</span>, <span class="dv">1</span>) <span class="op">/</span> np.sqrt(d_k)    <span class="co"># (h, n, n): one score matrix per head</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> mask <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span>:</span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>        scores <span class="op">=</span> scores <span class="op">+</span> mask                          <span class="co"># an (n, n) mask broadcasts over heads</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    A <span class="op">=</span> softmax(scores, axis<span class="op">=-</span><span class="dv">1</span>)</span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    heads <span class="op">=</span> A <span class="op">@</span> V                                       <span class="co"># (h, n, d_k)</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    concat <span class="op">=</span> heads.transpose(<span class="dv">1</span>, <span class="dv">0</span>, <span class="dv">2</span>).reshape(n, d_model)   <span class="co"># (n, h * d_k)</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> concat <span class="op">@</span> W_O, A                              <span class="co"># (n, d_model)</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Head <span class="math inline">\(i\)</span> simply uses columns <span class="math inline">\(i \cdot d_k\)</span> to <span class="math inline">\((i+1) \cdot d_k - 1\)</span> of each big projection matrix. We checked this against an explicit per-head loop with random weights (<span class="math inline">\(n = 5\)</span>, <span class="math inline">\(d_\text{model} = 512\)</span>, <span class="math inline">\(h = 8\)</span>) and the outputs match.</p>
+</section>
+<section id="what-the-paper-measured" class="level2">
+<h2 class="anchored" data-anchor-id="what-the-paper-measured">What the paper measured</h2>
+<p>The authors varied the number of heads while keeping the amount of computation constant (so more heads means a smaller <span class="math inline">\(d_k\)</span> and <span class="math inline">\(d_v\)</span>), and measured English-to-German translation on a development set (Vaswani et al., 2017, Table 3, rows A and B):</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Setting</th>
+<th>Heads <span class="math inline">\(h\)</span></th>
+<th><span class="math inline">\(d_k = d_v\)</span></th>
+<th>Perplexity (dev)</th>
+<th>BLEU (dev)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>base model</td>
+<td>8</td>
+<td>64</td>
+<td>4.92</td>
+<td>25.8</td>
+</tr>
+<tr class="even">
+<td>(A)</td>
+<td>1</td>
+<td>512</td>
+<td>5.29</td>
+<td>24.9</td>
+</tr>
+<tr class="odd">
+<td>(A)</td>
+<td>4</td>
+<td>128</td>
+<td>5.00</td>
+<td>25.5</td>
+</tr>
+<tr class="even">
+<td>(A)</td>
+<td>16</td>
+<td>32</td>
+<td>4.91</td>
+<td>25.8</td>
+</tr>
+<tr class="odd">
+<td>(A)</td>
+<td>32</td>
+<td>16</td>
+<td>5.01</td>
+<td>25.4</td>
+</tr>
+<tr class="even">
+<td>(B)</td>
+<td>8</td>
+<td><span class="math inline">\(d_k = 16\)</span></td>
+<td>5.16</td>
+<td>25.1</td>
+</tr>
+<tr class="odd">
+<td>(B)</td>
+<td>8</td>
+<td><span class="math inline">\(d_k = 32\)</span></td>
+<td>5.01</td>
+<td>25.4</td>
+</tr>
+</tbody>
+</table>
+<p>(Perplexity: lower is better. BLEU: a translation-quality score, higher is better. In rows B only the key size <span class="math inline">\(d_k\)</span> is reduced.)</p>
+<p>The paper’s reading: single-head attention is 0.9 BLEU worse than the best setting, and quality also drops with too many heads; reducing the key size <span class="math inline">\(d_k\)</span> hurts, which the authors take to suggest that judging compatibility is not easy and a more sophisticated compatibility function than a dot product might help.</p>
+<p>Two cautions when quoting these numbers. They come from one translation task and one model size, and the table reports single runs with no variance, so differences of a few tenths of a BLEU point are hard to interpret. The solid message is the larger one: one wide head is clearly worse than a moderate number of narrower heads, and there is a sweet spot rather than “more is always better”.</p>
+</section>
+<section id="what-do-heads-actually-learn" class="level2">
+<h2 class="anchored" data-anchor-id="what-do-heads-actually-learn">What do heads actually learn?</h2>
+<p>The paper’s appendix visualizes attention weights from layer 5 of 6 in the encoder. The authors describe many heads as attending to a long-distance dependency (the verb “making” attending to “more difficult”), two heads as “apparently involved in anaphora resolution” (the word “its” pointing back at “Law” and “application”), and others as showing behaviour that appears related to sentence structure, concluding that different heads learned different tasks (Vaswani et al., 2017). These are hand-picked qualitative examples from one layer of one model, and the wording is deliberately hedged.</p>
+<p>Later work gives a more detailed picture, in translation models:</p>
+<ul>
+<li>Voita et al.&nbsp;(2019) found that a small number of heads with identifiable roles (attending to adjacent positions, to syntactic relations, or to rare words) did most of the work, and that most of the other heads could be pruned with little loss in quality.</li>
+<li>Michel et al.&nbsp;(2019) found that a large share of heads can be removed at test time without significantly hurting performance, and that some layers can even be reduced to a single head. They also found that the encoder-decoder (cross) attention layers depend more on having multiple heads than self-attention layers do.</li>
+</ul>
+<p>So “different heads learn different things” has real support, but so does “many heads are redundant”. Both facts are consistent with the heads being a flexible budget rather than a set of hand-designed experts.</p>
+</section>
+<section id="common-pitfalls" class="level2">
+<h2 class="anchored" data-anchor-id="common-pitfalls">Common pitfalls</h2>
+<ul>
+<li><strong><span class="math inline">\(d_\text{model}\)</span> must be divisible by <span class="math inline">\(h\)</span>.</strong> Otherwise <span class="math inline">\(d_k = d_\text{model}/h\)</span> is not an integer and the reshape fails.</li>
+<li><strong>Forgetting the output projection <span class="math inline">\(W^O\)</span>.</strong> Concatenation alone leaves the heads’ outputs side by side. <span class="math inline">\(W^O\)</span> is what mixes information across heads.</li>
+<li><strong>Assuming more heads is better.</strong> In the paper’s own ablation, 32 heads scored below 8 and 16. More heads also means a smaller <span class="math inline">\(d_k\)</span> per head.</li>
+<li><strong>Thinking heads add parameters or compute.</strong> At fixed <span class="math inline">\(d_\text{model}\)</span> the parameter count and the score computation are unchanged, as computed above. What grows is the number of <span class="math inline">\(n \times n\)</span> weight matrices.</li>
+<li><strong>Over-reading single-head visualizations.</strong> A head that looks like it tracks grammar in one example, in one layer, may behave differently elsewhere, and attention weights alone are not a faithful explanation of a model’s output. See the pitfalls in the <a href="../../posts/attention-scaled-dot-product/index.html">first article</a>.</li>
+<li><strong>Applying the mask per head by mistake.</strong> The same causal mask is shared by all heads; an <span class="math inline">\((n, n)\)</span> mask broadcasts across the head dimension.</li>
+</ul>
+</section>
+<section id="summary" class="level2">
+<h2 class="anchored" data-anchor-id="summary">Summary</h2>
+<ul>
+<li>Multi-head attention runs <span class="math inline">\(h\)</span> attentions in parallel, each in a <span class="math inline">\(d_k = d_\text{model}/h\)</span> dimensional subspace, then concatenates and mixes them with <span class="math inline">\(W^O\)</span>.</li>
+<li>Parameters and score computation match one full-width head; the number of attention matrices is <span class="math inline">\(h\)</span> times larger.</li>
+<li>In the original ablations, one head was 0.9 BLEU worse than the best setting, and too many heads also hurt.</li>
+<li>Heads show some specialization, but studies of trained translation models find many heads are removable.</li>
+</ul>
+</section>
+<section id="references" class="level2">
+<h2 class="anchored" data-anchor-id="references">References</h2>
+<ul>
+<li>Vaswani, A., et al.&nbsp;(2017). <em>Attention Is All You Need.</em> NeurIPS 2017. <a href="https://arxiv.org/abs/1706.03762">arXiv:1706.03762</a>.</li>
+<li>Voita, E., Talbot, D., Moiseev, F., Sennrich, R., Titov, I. (2019). <em>Analyzing Multi-Head Self-Attention: Specialized Heads Do the Heavy Lifting, the Rest Can Be Pruned.</em> ACL 2019. <a href="https://arxiv.org/abs/1905.09418">arXiv:1905.09418</a>.</li>
+<li>Michel, P., Levy, O., Neubig, G. (2019). <em>Are Sixteen Heads Really Better than One?</em> NeurIPS 2019. <a href="https://arxiv.org/abs/1905.10650">arXiv:1905.10650</a>.</li>
+<li>Roitman, H. <em>The Hitchhiker’s Guide to Agentic AI: From Foundations to Systems.</em> <a href="https://arxiv.org/abs/2606.24937">arXiv:2606.24937</a>.</li>
+</ul>
+<hr>
+<p>This work adapts material from “The Hitchhiker’s Guide to Agentic AI” by Haggai Roitman (arXiv:2606.24937v3, book version 1.4), licensed under CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/). Changes: adapted into standalone articles, with added explanations, diagrams and examples. This work is licensed under CC BY-SA 4.0.</p>
+
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+<footer class="footer">
+  <div class="nav-footer">
+    <div class="nav-footer-left">
+      &nbsp;
+    </div>   
+    <div class="nav-footer-center">
+<p>Content licensed under <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a></p>
+</div>
+    <div class="nav-footer-right">
+      &nbsp;
+    </div>
+  </div>
+</footer>
+
+
+
+
+</body></html>
