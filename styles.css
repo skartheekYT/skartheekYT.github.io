@@ -74,6 +74,29 @@
   }
 }
 
+/* Wide screens (MacBook, desktop): let the topics sidebar use spare width that would
+   otherwise sit empty at the far right. Same column-line names as Quarto's docked grid.
+   Sidebar = 1.5em + minmax(200px, 320px) + 100px, about 324-444px.
+   Below 1400px (iPad, tablets, phones) Quarto's own grid applies unchanged. */
+@media (min-width: 1400px) {
+  body.docked:not(.fullcontent) #quarto-content.page-columns {
+    grid-template-columns:
+      [screen-start] 1.5em
+      [screen-start-inset page-start] minmax(200px, 320px)
+      [page-start-inset] 50px
+      [body-start-outset] 50px
+      [body-start] 1.5em
+      [body-content-start] minmax(500px, 850px)
+      [body-content-end] 1.5em
+      [body-end] 50px
+      [body-end-outset] 150px
+      [page-end-inset] 50px
+      [page-end] 1fr
+      [screen-end-inset] 1.5em
+      [screen-end];
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .quarto-grid-item.card {
     transition: none;
