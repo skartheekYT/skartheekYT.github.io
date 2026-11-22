@@ -63,7 +63,8 @@ format:
     theme: cosmo
     css: styles.css
     toc: true
+    include-after-body: toggle-panes.html
     grid:
-      sidebar-width: 320px
+      sidebar-width: 260px
       body-width: 850px
-      margin-width: 320px
+      margin-width: 250px
