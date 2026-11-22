@@ -495,14 +495,17 @@ Description
 </div></main> <!-- /main -->
 <script>
 /* Show/hide buttons for the left topics sidebar and the right "On this page" list.
-   Only on wide screens (992px+); below that Quarto already folds both into menus.
-   Each reader's choice is remembered in localStorage. */
+   992px+: the pane hides/shows in place and the choice is remembered in localStorage.
+   Below 992px (iPad portrait, split view, phones): the pane opens as a drawer over the article;
+   tapping the backdrop, a link in the drawer, or the button again closes it. */
 (function () {
   var body = document.body;
   var sidebar = document.querySelector('#quarto-sidebar .sidebar-item');
   var toc = document.querySelector('#quarto-margin-sidebar #TOC');
   var main = document.querySelector('main.content');
   if (!main || (!sidebar && !toc)) return;
+
+  var narrow = window.matchMedia('(max-width: 991.98px)');
 
   function load(key) {
     try { return localStorage.getItem(key); } catch (e) { return null; }
@@ -512,41 +515,90 @@ Description
   }
 
   var panes = [];
-  if (sidebar) panes.push({ key: 'panes.hideSidebar', cls: 'hide-sidebar', label: 'Topics', icon: 'bi-layout-sidebar' });
-  if (toc) panes.push({ key: 'panes.hideToc', cls: 'hide-toc', label: 'On this page', icon: 'bi-list-ul' });
+  if (sidebar) panes.push({ key: 'panes.hideSidebar', cls: 'hide-sidebar', drawer: 'drawer-open-sidebar', container: '#quarto-sidebar', label: 'Topics', icon: 'bi-layout-sidebar' });
+  if (toc) panes.push({ key: 'panes.hideToc', cls: 'hide-toc', drawer: 'drawer-open-toc', container: '#quarto-margin-sidebar', label: 'On this page', icon: 'bi-list-ul' });
 
   var bar = document.createElement('div');
   bar.className = 'pane-toggles';
 
-  panes.forEach(function (p) {
-    var stored = load(p.key);
-    // Default: sidebar open; TOC hidden on tablet-width screens, open on wide desktops.
-    var hidden = stored !== null
-      ? stored === '1'
-      : (p.cls === 'hide-toc' && window.innerWidth < 1400);
-    body.classList.toggle(p.cls, hidden);
+  var backdrop = document.createElement('div');
+  backdrop.className = 'pane-backdrop';
+  body.appendChild(backdrop);
 
+  var syncers = [];
+
+  function closeDrawers() {
+    panes.forEach(function (p) { body.classList.remove(p.drawer); });
+    syncers.forEach(function (fn) { fn(); });
+  }
+
+  panes.forEach(function (p) {
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'pane-toggle';
     btn.innerHTML = '<i class="bi ' + p.icon + '" aria-hidden="true"></i> <span>' + p.label + '</span>';
 
-    function sync() {
-      var isHidden = body.classList.contains(p.cls);
-      btn.setAttribute('aria-pressed', String(!isHidden));
-      btn.title = (isHidden ? 'Show ' : 'Hide ') + p.label.toLowerCase();
+    // Wide screens: restore the saved choice. Default: sidebar open; TOC hidden below 1400px.
+    function applyWideState() {
+      var stored = load(p.key);
+      var hidden = stored !== null
+        ? stored === '1'
+        : (p.cls === 'hide-toc' && window.innerWidth < 1400);
+      body.classList.toggle(p.cls, hidden);
     }
-    sync();
+
+    function isOpen() {
+      return narrow.matches
+        ? body.classList.contains(p.drawer)
+        : !body.classList.contains(p.cls);
+    }
+
+    function sync() {
+      var open = isOpen();
+      btn.setAttribute('aria-pressed', String(open));
+      btn.title = (open ? 'Hide ' : 'Show ') + p.label.toLowerCase();
+    }
+    syncers.push(sync);
 
     btn.addEventListener('click', function () {
-      var nowHidden = !body.classList.contains(p.cls);
-      body.classList.toggle(p.cls, nowHidden);
-      save(p.key, nowHidden ? '1' : '0');
-      sync();
+      if (narrow.matches) {
+        var willOpen = !body.classList.contains(p.drawer);
+        closeDrawers();
+        body.classList.toggle(p.drawer, willOpen);
+      } else {
+        var nowHidden = !body.classList.contains(p.cls);
+        body.classList.toggle(p.cls, nowHidden);
+        save(p.key, nowHidden ? '1' : '0');
+      }
+      syncers.forEach(function (fn) { fn(); });
     });
+
+    p.applyWideState = applyWideState;
     bar.appendChild(btn);
   });
 
+  function applyMode() {
+    closeDrawers();
+    panes.forEach(function (p) {
+      if (narrow.matches) body.classList.remove(p.cls); // drawers manage visibility on narrow screens
+      else p.applyWideState();
+    });
+    syncers.forEach(function (fn) { fn(); });
+  }
+
+  backdrop.addEventListener('click', closeDrawers);
+  panes.forEach(function (p) {
+    var el = document.querySelector(p.container);
+    if (el) el.addEventListener('click', function (e) {
+      if (narrow.matches && e.target.closest && e.target.closest('a[href]')) closeDrawers();
+    });
+  });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeDrawers(); });
+
+  if (narrow.addEventListener) narrow.addEventListener('change', applyMode);
+  else if (narrow.addListener) narrow.addListener(applyMode);
+
+  applyMode();
   main.insertBefore(bar, main.firstChild);
 })();
 </script>
