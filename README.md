@@ -27,7 +27,6 @@ series/<series-slug>/
    date: YYYY-MM-DD
    series: "Foundations of LLMs"
    part: 4
-   categories: [lowercase, hyphenated-tags]
    draft: false
    ```
 3. Add it to that series' sidebar in `_quarto.yml` (as a `section:` with any companions under `contents:`).

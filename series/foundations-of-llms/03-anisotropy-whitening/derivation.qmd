@@ -5,7 +5,6 @@ date: "2026-11-01"
 draft: false
 series: "Foundations of LLMs"
 companion: true
-categories: [embeddings, linear-algebra, math]
 aliases:
   - /posts/anisotropy-whitening/derivation.html
 ---

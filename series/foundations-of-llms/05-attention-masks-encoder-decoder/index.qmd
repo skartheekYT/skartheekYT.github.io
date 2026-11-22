@@ -5,7 +5,6 @@ date: "2026-11-07"
 series: "Foundations of LLMs"
 part: 5
 draft: false
-categories: [llm-fundamentals, transformers, attention]
 description: "The causal mask, teacher forcing and the right shift, cross-attention, and how the original encoder-decoder Transformer became the decoder-only architecture behind modern LLMs."
 ---
 

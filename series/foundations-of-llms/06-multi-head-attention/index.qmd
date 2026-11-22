@@ -5,7 +5,6 @@ date: "2026-11-07"
 series: "Foundations of LLMs"
 part: 6
 draft: false
-categories: [llm-fundamentals, transformers, attention]
 description: "How multi-head attention splits one wide attention into several narrower ones, why that costs the same, what the original ablations showed, and how to read claims about what heads learn."
 ---
 

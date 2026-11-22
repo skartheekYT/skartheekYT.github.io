@@ -4,7 +4,6 @@ description: "RoPE encodes position by rotating queries and keys, so attention s
 date: "2026-11-12"
 series: "Foundations of LLMs"
 part: 9
-categories: [llms, transformers, positional-encoding, rope]
 draft: false
 ---
 

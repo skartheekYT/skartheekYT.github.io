@@ -4,7 +4,6 @@ description: "A step-by-step derivation of the 2D rotary solution and of the lon
 date: "2026-11-12"
 series: "Foundations of LLMs"
 companion: true
-categories: [llms, positional-encoding, rope, math]
 draft: false
 ---
 

@@ -4,7 +4,6 @@ description: "Attention has no sense of order. Sinusoidal, learned, relative-bia
 date: "2026-11-12"
 series: "Foundations of LLMs"
 part: 8
-categories: [llms, transformers, positional-encoding]
 draft: false
 ---
 

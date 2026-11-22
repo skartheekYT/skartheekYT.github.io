@@ -4,7 +4,6 @@ description: "A step-by-step derivation showing how WordPiece's unigram log-like
 date: "2026-10-31"
 series: "Foundations of LLMs"
 companion: true
-categories: [tokenization, wordpiece, math]
 aliases:
   - /posts/tokenization-bpe/wordpiece-likelihood-proof.html
 license: "CC BY-SA 4.0"

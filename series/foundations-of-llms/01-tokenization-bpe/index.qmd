@@ -4,7 +4,6 @@ description: "Why language models don't read characters or words, how BPE builds
 date: "2026-10-31"
 series: "Foundations of LLMs"
 part: 1
-categories: [tokenization, bpe, wordpiece]
 aliases:
   - /posts/tokenization-bpe/index.html
 license: "CC BY-SA 4.0"
