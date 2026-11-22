@@ -1,6 +1,6 @@
 ---
 title: "Foundations of LLMs"
-description: "The core ideas behind large language models, following the first chapter of the book."
+description: ""
 listing:
   contents: "*/index.qmd"
   sort: "part asc"
@@ -14,4 +14,6 @@ listing:
 
 The first series on this site. It covers the foundations of large language models, following the first chapter of *The Hitchhiker's Guide to Agentic AI*. New parts are added as I work through the chapter.
 
-**Prerequisites:** some Python, and basic linear algebra (vectors, matrix products, eigenvalues). The companion pages linked from each article go deeper into the math and can be skipped on a first read.
+::: {.callout-note appearance="minimal"}
+The companion pages linked from each article go deeper into the math and can be skipped on a first read.
+:::
